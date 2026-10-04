@@ -1,3 +1,15 @@
+## [0.1.30.0]
+
+### Added
+
+- Edit the YouTube source of a managed download and queue the selected video for reprocessing. Prefill existing YouTube sources and leave the field empty for themes from the configured TV URL source.
+- Translate the edit dialog, buttons, and validation messages into every supported language.
+
+### Improved
+
+- Use Jellyfin's native edit dialog with concise Save and Cancel actions, a red Cancel button on the right, and recovery from dialog setup errors.
+- Validate YouTube video URLs in both the page and management API. Keep the current theme intact until reprocessing succeeds and preserve all file-ownership checks.
+
 ## [0.1.29.0]
 
 ### Improved

@@ -16,7 +16,6 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.JellyScore;
 
 public sealed record ThemeResult(string Result, string? ReasonCode = null);
-public sealed record ManualThemeItem(Guid ItemId, string Name, int? Year, string Kind, string Library, bool CustomSourceAvailable);
 
 // ReSharper disable once ClassNeverInstantiated.Global
 public sealed class ThemeService(ILibraryManager library, IProviderManager providers, IFileSystem fileSystem, IMediaEncoder encoder, Store store, YouTube youtube,
@@ -71,44 +70,6 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         return rows.Where(r => !removed.Contains(r.ItemId)).ToArray();
     }
     public string? Outcome(Guid id) => store.Read(s => s.Outcomes.GetValueOrDefault(id));
-
-    private static Uri? CustomSource(BaseItem item) => item is Series && Plugin.Instance.Configuration.TvThemeUrlTemplate is { } template &&
-        item.TryGetProviderId(MetadataProvider.Tvdb, out var tvdbId) ? TvThemeSource.Url(template, tvdbId) : null;
-
-    public (IReadOnlyList<ManualThemeItem> Items, bool HasMore) ManualItems(string? search, int page)
-    {
-        var selected = Plugin.Instance.Configuration.SelectedLibraries(library);
-        if (selected.Length == 0) return ([], false);
-        var managed = store.Read(s => s.Themes.Keys.ToHashSet());
-        var items = new List<ManualThemeItem>();
-        var skip = (Math.Max(1, page) - 1L) * JellyScoreConstants.AdminPageSize;
-        var query = new InternalItemsQuery { IncludeItemTypes = [Jellyfin.Data.Enums.BaseItemKind.Movie, Jellyfin.Data.Enums.BaseItemKind.Series, Jellyfin.Data.Enums.BaseItemKind.BoxSet],
-            AncestorIds = selected, Recursive = true, SearchTerm = search?.Trim(), Limit = JellyScoreConstants.ScanBatchSize,
-            OrderBy = [(Jellyfin.Data.Enums.ItemSortBy.SortName, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending)] };
-        for (var offset = 0; ; offset += JellyScoreConstants.ScanBatchSize)
-        {
-            query.StartIndex = offset;
-            var batch = library.GetItemList(query).ToArray();
-            foreach (var item in batch)
-            {
-                if (managed.Contains(item.Id) || string.IsNullOrWhiteSpace(item.Name)) continue;
-                var gate = _locks.GetOrAdd(item.Id, _ => new SemaphoreSlim(1));
-                if (!gate.Wait(0)) continue;
-                try
-                {
-                    var (folder, libraryName, _) = Location(item);
-                    if (OtherTheme(item, folder, null)) continue;
-                    if (skip > 0) { skip--; continue; }
-                    items.Add(new(item.Id, item.Name, item.ProductionYear, item is Movie ? "Movie" : item is BoxSet ? "Collection" : "Series", libraryName, CustomSource(item) is not null));
-                    if (items.Count > JellyScoreConstants.AdminPageSize) return (items.Take(JellyScoreConstants.AdminPageSize).ToArray(), true);
-                }
-                catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException) { }
-                finally { gate.Release(); }
-            }
-            if (batch.Length < JellyScoreConstants.ScanBatchSize) return (items, false);
-        }
-    }
-
     public static string Status(ManagedTheme record)
     {
         try
@@ -221,20 +182,17 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         }
     }
 
-    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null, string? youtubeUrl = null, string? addSource = null)
+    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null, string? youtubeUrl = null)
     {
         var manualVideoId = youtubeUrl is null ? null : YouTube.VideoId(youtubeUrl) ?? throw new InvalidOperationException("Invalid YouTube URL.");
-        if (manualVideoId is not null && !replacement && addSource is null) throw new InvalidOperationException("No managed theme to refresh.");
+        if (manualVideoId is not null && !replacement) throw new InvalidOperationException("No managed theme to refresh.");
         var gate = _locks.GetOrAdd(id, _ => new SemaphoreSlim(1));
         await gate.WaitAsync(ct);
         try
         {
             var item = library.GetItemById(id) ?? throw new InvalidOperationException("Item no longer exists.");
-            if (addSource is not null && item is not (Movie or Series or BoxSet)) throw new InvalidOperationException("Unsupported item.");
             var (folder, libraryName, libraryId) = Location(item);
-            var customSource = CustomSource(item);
-            if (addSource == "custom" && customSource is null) throw new InvalidOperationException("Configured TV theme source is unavailable for this item.");
-            if (!replacement && addSource is null && item is Movie movie && !string.IsNullOrWhiteSpace(movie.TmdbCollectionName))
+            if (!replacement && item is Movie movie && !string.IsNullOrWhiteSpace(movie.TmdbCollectionName))
             {
                 var collection = library.GetItemList(new InternalItemsQuery { IncludeItemTypes = [Jellyfin.Data.Enums.BaseItemKind.BoxSet] })
                     .OfType<BoxSet>().FirstOrDefault(boxSet =>
@@ -252,7 +210,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
             if (replacement && existing is null) throw new InvalidOperationException("No managed theme to refresh.");
             if (existing is not null && !Owned(existing, item, folder)) throw new InvalidOperationException("Theme changed elsewhere. The file was left untouched.");
             if (!replacement && existing is not null) return new("Already themed");
-            if (!replacement && addSource is null && store.Read(s => s.Suppressed.Contains(id))) return new("Suppressed until rescan");
+            if (!replacement && store.Read(s => s.Suppressed.Contains(id))) return new("Suppressed until rescan");
             if (OtherTheme(item, folder, existing?.Path)) return new("Already themed");
             if (string.IsNullOrWhiteSpace(item.Name)) throw new InvalidOperationException("Item title is not ready; retry after metadata refresh.");
             var work = new Work(item.Name, item.OriginalTitle, item.ProductionYear, item is Series);
@@ -301,7 +259,6 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                         VideoId = source.Video.Id, VideoTitle = source.Video.Title, Recording = source.Recording, SourceUrl = sourceUrl,
                         Hash = hash, Score = source.Score, Evidence = source.Evidence, Date = DateTimeOffset.UtcNow };
                     s.Outcomes[id] = result;
-                    if (addSource is not null) s.Suppressed.Remove(id);
                 });
                 Refresh(item);
                 return new(result);
@@ -320,7 +277,8 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 }
                 finally { if (File.Exists(temporary)) File.Delete(temporary); }
             }
-            if (!replacement && addSource != "youtube" && customSource is { } url)
+            if (!replacement && item is Series && Plugin.Instance.Configuration.TvThemeUrlTemplate is { } template &&
+                item.TryGetProviderId(MetadataProvider.Tvdb, out var tvdbId) && TvThemeSource.Url(template, tvdbId) is { } url)
             {
                 var temporary = Path.Combine(folder, ".theme-" + Guid.NewGuid().ToString("N") + ".mp3");
                 try
@@ -334,13 +292,9 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                         converted = true;
                     }
                     catch (Exception e) when (!ct.IsCancellationRequested && e is IOException or HttpRequestException or SocketException or JsonException or OperationCanceledException or KeyNotFoundException or InvalidOperationException)
-                    {
-                        if (addSource == "custom") throw new DownloadFailure("Configured TV theme source failed: " + e.Message);
-                        logger.LogWarning(e, "Configured TV theme source failed for {ItemId}; trying YouTube", id);
-                    }
+                    { logger.LogWarning(e, "Configured TV theme source failed for {ItemId}; trying YouTube", id); }
                     if (converted)
                     {
-                        item.TryGetProviderId(MetadataProvider.Tvdb, out var tvdbId);
                         var sourceId = "tvdb:" + tvdbId;
                         var direct = new Choice(new Video(sourceId, item.Name + " (TV theme)", "", "", null), sourceId, 100,
                             "Configured TV theme source for TVDB ID " + tvdbId);

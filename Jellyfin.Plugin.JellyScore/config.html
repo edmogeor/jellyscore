@@ -2,52 +2,29 @@
   id="themeSongsPage"
   data-role="page"
   class="page type-interior pluginConfigurationPage"
-  data-require="emby-input,emby-button,emby-checkbox,emby-select"
+  data-require="emby-input,emby-button,emby-checkbox"
 >
   <style>
-    :is(#themeSongsEdit, #themeSongsAdd) .formDialogFooter {
+    #themeSongsEdit .formDialogFooter {
       display: flex;
       gap: 0.5rem;
     }
-    :is(#themeSongsEdit, #themeSongsAdd) .formDialogFooterItem {
+    #themeSongsEdit .formDialogFooterItem {
       flex: 1;
       width: auto;
       margin: 0;
     }
-    :is(#themeSongsEdit, #themeSongsAdd) .button-cancel {
+    #themeSongsEdit .button-cancel {
       background: var(--jf-palette-error-main);
       color: var(--jf-palette-error-contrastText, white);
     }
-    :is(#themeSongsEdit, #themeSongsAdd) .button-cancel:hover {
+    #themeSongsEdit .button-cancel:hover {
       background: var(--jf-palette-error-dark);
     }
     #themeSongsEdit .formDialogHeaderTitle,
-    #themeSongsAdd .formDialogHeaderTitle,
     #themeSongsConfirm .formDialogHeaderTitle {
       display: block;
       margin: 0 !important;
-    }
-    #themeSongsAdd [hidden] {
-      display: none !important;
-    }
-    #themeSongsAdd .themeItemResults {
-      max-height: 18rem;
-      overflow-y: auto;
-      margin-bottom: 1rem;
-    }
-    #themeSongsAdd .themeItemResults button {
-      width: 100%;
-      text-align: left;
-      margin: 0 0 0.5rem;
-      white-space: normal;
-    }
-    #themeSongsAdd .themeItemPages {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-    }
-    #themeSongsPage #themePendingAdds {
-      margin-bottom: 0.75rem;
     }
     #themeSongsPage .content-primary {
       max-width: 80rem;
@@ -192,7 +169,6 @@
       flex: 1 1 16rem;
       margin: 0;
     }
-    #themeSongsPage #themeAdd,
     #themeSongsPage #themeDeleteAll {
       margin: 0;
     }
@@ -765,14 +741,6 @@
         </div>
         <button
           is="emby-button"
-          id="themeAdd"
-          class="raised button-submit"
-          data-i18n="addDownload"
-        >
-          {{addDownload}}
-        </button>
-        <button
-          is="emby-button"
           id="themeDeleteAll"
           class="raised button-delete"
           data-i18n="deleteAll"
@@ -781,7 +749,6 @@
           {{deleteAll}}
         </button>
       </div>
-      <div id="themePendingAdds" role="status" aria-live="polite" hidden></div>
       <p id="themeEmpty" hidden>{{noDownloads}}</p>
       <div style="overflow-x: auto">
         <table
@@ -853,7 +820,6 @@
       let lastIssuesKey = "";
       const refreshingItems = new Set();
       const refreshErrors = new Map();
-      const pendingAdds = new Map();
       let refreshQueue = Promise.resolve();
       let activeRefreshItem = null;
       let savedSettings = "";
@@ -910,14 +876,12 @@
           settingsValue() === savedSettings;
       };
       const updateRowActions = () => {
-        $("#themeAdd").disabled = scanRunning || bulkBusy;
         const removeAll = $("#themeDeleteAll");
         removeAll.hidden = allTotal === 0;
-        removeAll.disabled =
-          scanRunning || bulkBusy || pendingAdds.size > 0 || allTotal === 0;
+        removeAll.disabled = scanRunning || bulkBusy || allTotal === 0;
         removeAll.textContent = t(bulkBusy ? "deleting" : "deleteAll");
         $("#themeScanStart").disabled =
-          scanRunning || bulkBusy || downloaderFailed || pendingAdds.size > 0;
+          scanRunning || bulkBusy || downloaderFailed;
         for (const button of page.querySelectorAll(
           "#themeRows button[data-theme-action]",
         )) {
@@ -959,37 +923,6 @@
           );
         } finally {
           confirming = false;
-        }
-      };
-      const youtubeVideoUrl = (value) => {
-        try {
-          const url = new URL(value.trim());
-          const id =
-            url.hostname === "youtu.be"
-              ? url.pathname.slice(1)
-              : [
-                    "youtube.com",
-                    "www.youtube.com",
-                    "m.youtube.com",
-                    "music.youtube.com",
-                  ].includes(url.hostname)
-                ? url.pathname === "/watch"
-                  ? url.searchParams.getAll("v").length === 1
-                    ? url.searchParams.get("v")
-                    : null
-                  : /^\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})$/.exec(
-                      url.pathname,
-                    )?.[2]
-                : null;
-          return ["https:", "http:"].includes(url.protocol) &&
-            !url.username &&
-            !url.password &&
-            !url.port &&
-            /^[a-zA-Z0-9_-]{11}$/.test(id || "")
-            ? "https://www.youtube.com/watch?v=" + id
-            : null;
-        } catch {
-          return null;
         }
       };
       const editSource = async (item) => {
@@ -1041,13 +974,36 @@
           input.oninput = () => input.setCustomValidity("");
           dialog.querySelector("form").onsubmit = (event) => {
             event.preventDefault();
-            const url = youtubeVideoUrl(input.value);
-            if (!url) {
+            const url = new URL(input.value.trim());
+            const id =
+              url.hostname === "youtu.be"
+                ? url.pathname.slice(1)
+                : [
+                      "youtube.com",
+                      "www.youtube.com",
+                      "m.youtube.com",
+                      "music.youtube.com",
+                    ].includes(url.hostname)
+                  ? url.pathname === "/watch"
+                    ? url.searchParams.getAll("v").length === 1
+                      ? url.searchParams.get("v")
+                      : null
+                    : /^\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})$/.exec(
+                        url.pathname,
+                      )?.[2]
+                  : null;
+            if (
+              !["https:", "http:"].includes(url.protocol) ||
+              url.username ||
+              url.password ||
+              url.port ||
+              !/^[a-zA-Z0-9_-]{11}$/.test(id || "")
+            ) {
               input.setCustomValidity(t("invalidYouTubeUrl"));
               input.reportValidity();
               return;
             }
-            result = url;
+            result = "https://www.youtube.com/watch?v=" + id;
             setTimeout(() => dialogHelper.close(dialog), 300);
           };
           await dialogHelper.open(dialog);
@@ -1056,281 +1012,6 @@
           dialog?.remove();
           confirming = false;
         }
-      };
-      const addDownload = async () => {
-        if (confirming) return null;
-        confirming = true;
-        const helper = Dashboard.dialogHelper;
-        let dialog;
-        let searchTimer;
-        let searchVersion = 0;
-        try {
-          dialog = helper.createDialog({
-            id: "themeSongsAdd",
-            removeOnClose: true,
-            scrollY: false,
-          });
-          dialog.classList.add("formDialog", "dialog-fullscreen-lowres");
-          dialog.setAttribute("role", "dialog");
-          dialog.setAttribute("aria-modal", "true");
-          dialog.setAttribute("aria-labelledby", "themeSongsAddTitle");
-          dialog.innerHTML = `
-            <div class="formDialogHeader"><h3 id="themeSongsAddTitle" class="formDialogHeaderTitle"></h3></div>
-            <div class="formDialogContent smoothScrollY">
-              <div class="dialogContentInner dialogContentInner-mini">
-                <form>
-                  <div class="themePickItem">
-                    <div class="inputContainer"><input is="emby-input" type="search" label="" /><p class="fieldDescription"></p></div>
-                    <div class="themeItemResults"></div>
-                    <div class="themeItemPages">
-                      <button is="emby-button" type="button" class="themeItemPrevious raised"></button>
-                      <button is="emby-button" type="button" class="themeItemNext raised"></button>
-                    </div>
-                  </div>
-                  <div class="themeAddOptions" hidden>
-                    <p class="themeSelectedItem"></p>
-                    <div class="inputContainer"><select is="emby-select" class="themeAddSource" label="">
-                      <option value="youtube">YouTube</option><option value="custom"></option>
-                    </select></div>
-                    <div class="inputContainer themeAddMethod"><select is="emby-select" class="themeAddMode" label="">
-                      <option value="automatic"></option><option value="url"></option>
-                    </select></div>
-                    <div class="inputContainer themeAddUrl" hidden><input is="emby-input" type="url" label="" /></div>
-                  </div>
-                  <p class="themeAddError" role="alert" hidden></p>
-                  <div class="formDialogFooter">
-                    <button is="emby-button" type="button" class="themeAddBack raised formDialogFooterItem" hidden></button>
-                    <button is="emby-button" type="submit" class="button-submit raised formDialogFooterItem" hidden></button>
-                    <button is="emby-button" type="button" class="button-cancel raised formDialogFooterItem"></button>
-                  </div>
-                </form>
-              </div>
-            </div>`;
-          const find = (selector) => dialog.querySelector(selector);
-          const label = (element, key) =>
-            element.label
-              ? element.label(t(key))
-              : element.setAttribute("label", t(key));
-          find("h3").textContent = t("addDownload");
-          find(".fieldDescription").textContent = t("manualItemHelp");
-          const search = find('input[type="search"]');
-          label(search, "searchItems");
-          const source = find(".themeAddSource");
-          label(source, "source");
-          source.options[1].textContent = t("customSource");
-          const mode = find(".themeAddMode");
-          label(mode, "themeMethod");
-          mode.options[0].textContent = t("findAutomatically");
-          mode.options[1].textContent = t("provideUrl");
-          const url = find('input[type="url"]');
-          label(url, "youTubeUrl");
-          url.placeholder = "https://www.youtube.com/watch?v=…";
-          url.oninput = () => url.setCustomValidity("");
-          const submit = find(".button-submit");
-          submit.textContent = t("add");
-          const back = find(".themeAddBack");
-          back.textContent = t("back");
-          const cancel = find(".button-cancel");
-          cancel.textContent = t("cancel");
-          cancel.onclick = () => helper.close(dialog);
-          const error = find(".themeAddError");
-          const previous = find(".themeItemPrevious");
-          previous.textContent = t("previousPage");
-          const next = find(".themeItemNext");
-          next.textContent = t("nextPage");
-          let item = null;
-          let itemPage = 1;
-          let result = null;
-          const updateOptions = () => {
-            const youtube = source.value === "youtube";
-            find(".themeAddMethod").hidden = !youtube;
-            const needsUrl = youtube && mode.value === "url";
-            find(".themeAddUrl").hidden = !needsUrl;
-            url.required = needsUrl;
-            url.disabled = !needsUrl;
-            submit.disabled =
-              scanRunning || bulkBusy || (youtube && downloaderFailed);
-            error.hidden = !youtube || !downloaderFailed;
-            error.textContent = error.hidden ? "" : t(downloaderFailureCode);
-          };
-          source.onchange = updateOptions;
-          mode.onchange = updateOptions;
-          const showOptions = (selected) => {
-            item = selected;
-            searchVersion++;
-            clearTimeout(searchTimer);
-            find(".themePickItem").hidden = true;
-            find(".themeAddOptions").hidden = false;
-            find(".themeSelectedItem").textContent =
-              item.Name + (item.Year ? " (" + item.Year + ")" : "");
-            source.value = "youtube";
-            source.options[1].hidden = !item.CustomSourceAvailable;
-            source.options[1].disabled = !item.CustomSourceAvailable;
-            mode.value = "automatic";
-            back.hidden = false;
-            submit.hidden = false;
-            updateOptions();
-            source.focus();
-          };
-          const searchItems = async () => {
-            const version = ++searchVersion;
-            previous.disabled = true;
-            next.disabled = true;
-            const results = find(".themeItemResults");
-            results.textContent = t("working");
-            error.hidden = true;
-            try {
-              const data = await request(
-                "items?page=" +
-                  itemPage +
-                  "&search=" +
-                  encodeURIComponent(search.value),
-              );
-              if (version !== searchVersion) return;
-              results.replaceChildren();
-              for (const candidate of data.Items.filter(
-                (candidate) => !pendingAdds.has(candidate.ItemId),
-              )) {
-                const button = document.createElement("button", "emby-button");
-                button.type = "button";
-                button.className = "emby-button raised";
-                button.textContent =
-                  candidate.Name +
-                  (candidate.Year ? " (" + candidate.Year + ")" : "") +
-                  " · " +
-                  t(
-                    {
-                      Movie: "movie",
-                      Series: "series",
-                      Collection: "collection",
-                    }[candidate.Kind],
-                  ) +
-                  " · " +
-                  candidate.Library;
-                button.onclick = () => showOptions(candidate);
-                results.append(button);
-              }
-              if (!results.childElementCount)
-                results.textContent = t("noResults");
-              previous.disabled = itemPage === 1;
-              next.disabled = !data.HasMore;
-            } catch (e) {
-              if (version !== searchVersion) return;
-              results.replaceChildren();
-              error.textContent = userError(e);
-              error.hidden = false;
-            }
-          };
-          search.oninput = () => {
-            clearTimeout(searchTimer);
-            searchVersion++;
-            itemPage = 1;
-            searchTimer = setTimeout(searchItems, 250);
-          };
-          previous.onclick = () => {
-            itemPage--;
-            searchItems();
-          };
-          next.onclick = () => {
-            itemPage++;
-            searchItems();
-          };
-          back.onclick = () => {
-            item = null;
-            find(".themePickItem").hidden = false;
-            find(".themeAddOptions").hidden = true;
-            back.hidden = true;
-            submit.hidden = true;
-            url.disabled = true;
-            error.hidden = true;
-            searchItems();
-            search.focus();
-          };
-          find("form").onsubmit = (event) => {
-            event.preventDefault();
-            if (!item) {
-              searchItems();
-              return;
-            }
-            updateOptions();
-            if (submit.disabled) return;
-            result = {
-              ItemId: item.ItemId,
-              Source: source.value,
-              Mode: source.value === "custom" ? "automatic" : mode.value,
-              YouTubeUrl: !url.disabled ? url.value.trim() : null,
-            };
-            if (result.Mode === "url") {
-              const value = youtubeVideoUrl(result.YouTubeUrl);
-              if (!value) {
-                result = null;
-                url.setCustomValidity(t("invalidYouTubeUrl"));
-                url.reportValidity();
-                return;
-              }
-              result.YouTubeUrl = value;
-            }
-            result = { Item: item, Request: result };
-            setTimeout(() => helper.close(dialog), 300);
-          };
-          const opened = helper.open(dialog);
-          searchItems();
-          await opened;
-          return result;
-        } finally {
-          searchVersion++;
-          clearTimeout(searchTimer);
-          dialog?.remove();
-          confirming = false;
-        }
-      };
-      const renderPendingAdds = () => {
-        const container = $("#themePendingAdds");
-        container.hidden = !pendingAdds.size;
-        container.replaceChildren(
-          ...[...pendingAdds.values()].map((item) => {
-            const status = document.createElement("p");
-            status.className = "themeRowBusy";
-            status.append(
-              icon("sync"),
-              document.createTextNode(
-                t(item.Active ? "addingFor" : "queuedAddFor", item.Name),
-              ),
-            );
-            return status;
-          }),
-        );
-      };
-      const queueAddition = ({ Item: item, Request: body }) => {
-        if (pendingAdds.has(item.ItemId)) return;
-        pendingAdds.set(item.ItemId, { Name: item.Name, Active: false });
-        renderPendingAdds();
-        updateRowActions();
-        const run = async () => {
-          pendingAdds.get(item.ItemId).Active = true;
-          renderPendingAdds();
-          try {
-            const data = await request("downloads", {
-              method: "POST",
-              body: JSON.stringify(body),
-            });
-            toast(
-              t(
-                data.Result === "Added"
-                  ? "themeAdded"
-                  : data.ReasonCode || "noMatch",
-              ),
-            );
-          } catch (e) {
-            toast(userError(e));
-          } finally {
-            pendingAdds.delete(item.ItemId);
-            renderPendingAdds();
-            updateRowActions();
-            await load(rows);
-          }
-        };
-        refreshQueue = refreshQueue.then(run, run);
       };
       const request = async (path, options = {}) => {
         const response = await fetch(ApiClient.getUrl("ThemeSongs/" + path), {
@@ -1927,16 +1608,6 @@
         try {
           await request("scan/cancel", { method: "POST" });
           await progress();
-        } catch (e) {
-          showError(e);
-        }
-      };
-      $("#themeAdd").onclick = async () => {
-        if (!visible || scanRunning || bulkBusy) return;
-        try {
-          const addition = await addDownload();
-          if (addition && visible && !scanRunning && !bulkBusy)
-            queueAddition(addition);
         } catch (e) {
           showError(e);
         }

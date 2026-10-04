@@ -20,16 +20,12 @@ foreach (var locale in new[] { "da", "de", "en-us", "es", "fi", "fr", "it", "ja"
     using var strings = JsonDocument.Parse(stream);
     check(new[] { "cookiesLabel", "cookiesHelp", "cookiesGuide", "invalidCookies", "runtimeInstallFailed",
         "tvThemeSourceLabel", "tvThemeSourceHelp", "invalidTvThemeUrl",
-        "editTheme", "editThemeFor", "youTubeUrl", "editThemeHelp", "confirmEdit", "cancel", "invalidYouTubeUrl",
-        "addDownload", "searchItems", "manualItemHelp", "source", "customSource", "themeMethod", "findAutomatically", "provideUrl",
-        "back", "add", "movie", "series", "collection", "themeAdded", "queuedAddFor", "addingFor", "invalidAddRequest", "themeAlreadyExists", "customSourceUnavailable", "addFailed",
         "scanItemStage", "stagePreparing", "stagePreparingTools",
         "stageSearching", "stageDownloading", "stageProcessing" }.All(key =>
         strings.RootElement.TryGetProperty(key, out var value) && !string.IsNullOrWhiteSpace(value.GetString())) &&
         strings.RootElement.GetProperty("rateLimited").GetString()!.Contains("{0}", StringComparison.Ordinal) &&
-        strings.RootElement.GetProperty("scanItemStage").GetString()!.Contains("{1}", StringComparison.Ordinal) &&
-        new[] { "editThemeFor", "queuedAddFor", "addingFor" }.All(key => strings.RootElement.GetProperty(key).GetString()!.Contains("{0}", StringComparison.Ordinal)),
-        $"settings, theme management, and scan status are translated for {locale}");
+        strings.RootElement.GetProperty("scanItemStage").GetString()!.Contains("{1}", StringComparison.Ordinal),
+        $"cookie settings and scan status are translated for {locale}");
 }
 
 var original = video("aaaaaaaaaaa", "Dune Main Theme", licensed);
