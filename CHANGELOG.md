@@ -7,7 +7,7 @@
 
 ### Improved
 
-- Use Jellyfin's native edit dialog with concise Save and Cancel actions, a red Cancel button on the right, and recovery from dialog setup errors.
+- Use Jellyfin's native edit dialog with a red Cancel button on the left, Save on the right, and recovery from dialog setup errors.
 - Validate YouTube video URLs in both the page and management API. Keep the current theme intact until reprocessing succeeds and preserve all file-ownership checks.
 
 ## [0.1.29.0]
