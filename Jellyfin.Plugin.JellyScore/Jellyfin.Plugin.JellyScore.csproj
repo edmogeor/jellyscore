@@ -12,7 +12,7 @@
     <EmbeddedResource Include="Strings/*.json" />
   </ItemGroup>
   <Target Name="EmbedEnglishStrings" BeforeTargets="AssignTargetPaths"
-          Inputs="config.html;Strings/en-us.json;../scripts/embed-english.mjs"
+          Inputs="config.html;Strings/en-us.json;../scripts/embed-english.mjs;../package-lock.json"
           Outputs="$(IntermediateOutputPath)config.html">
     <Exec Command="node &quot;$(MSBuildProjectDirectory)/../scripts/embed-english.mjs&quot; &quot;$(MSBuildProjectDirectory)/config.html&quot; &quot;$(MSBuildProjectDirectory)/Strings/en-us.json&quot; &quot;$(IntermediateOutputPath)config.html&quot;" />
   </Target>

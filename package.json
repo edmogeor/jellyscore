@@ -6,7 +6,11 @@
     "lint": "bash scripts/lint-config.sh"
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
     "oxlint": "1.85.0",
     "prettier": "3.9.9"
+  },
+  "dependencies": {
+    "@videojs/cdn": "10.0.1"
   }
 }
