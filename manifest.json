@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Added\n\n- Edit the YouTube source of a managed download and queue the selected video for reprocessing. Prefill existing YouTube sources and leave the field empty for themes from the configured TV URL source.\n- Translate the edit dialog, buttons, and validation messages into every supported language.\n\n### Improved\n\n- Use Jellyfin's native edit dialog with concise Save and Cancel actions, a red Cancel button on the right, and recovery from dialog setup errors.\n- Validate YouTube video URLs in both the page and management API. Keep the current theme intact until reprocessing succeeds and preserve all file-ownership checks.\n\n",
+        "checksum": "ff9c161b52c00ac3a73d793886ead45e",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.30.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-04T18:59:01Z",
+        "version": "0.1.30.0"
+      },
+      {
         "changelog": "### Improved\n\n- Queue administrator refreshes across items and sessions, show waiting items in the admin page, and retain inline refresh errors after the list updates.\n- Exclude previously used video IDs before fetching metadata so they do not occupy any search or album-track shortlist slots.\n- Wait for GitHub's new release listing before regenerating the plugin repository manifest.\n\n",
         "checksum": "eb303dc982d0e42483b429572d18e7d0",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.29.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T08:41:54Z",
         "version": "0.1.1.0"
-      },
-      {
-        "changelog": "### Added\n\n- Theme song discovery for selected movie and TV libraries, with conservative matching and two-pass loudness normalization.\n- Admin dashboard for settings, rescan, managed downloads, refresh, and delete.\n- One plugin package containing yt-dlp binaries for supported server platforms.\n",
-        "checksum": "2debf2464e4b9bb2793fec6d5d6c09c0",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.0.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T07:45:14Z",
-        "version": "0.1.0.0"
       }
     ]
   }
