@@ -77,6 +77,8 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
             .Take(JellyScoreConstants.AdminPageSize).Select(r => new {
             r.ItemId, r.Name, r.Kind, r.Year, r.Library, r.Path, r.VideoTitle, r.Score, r.Evidence, r.Date,
             Source = r.SourceUrl ?? "https://www.youtube.com/watch?v=" + r.VideoId,
+            YouTubeUrl = !r.VideoId.StartsWith("tvdb:", StringComparison.Ordinal) && YouTube.VideoId(r.SourceUrl ?? "https://www.youtube.com/watch?v=" + r.VideoId) is { } videoId
+                ? "https://www.youtube.com/watch?v=" + videoId : null,
             Status = ThemeService.Status(r) }) };
     }
 
@@ -105,6 +107,20 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     {
         await RefreshGate.WaitAsync(ct);
         try { return Ok(new { (await themes.Process(id, true, ct)).Result }); }
+        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
+        catch (Exception e) when (e is IOException or SearchFailure) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
+        finally { RefreshGate.Release(); }
+    }
+
+    public sealed record EditRequest(string? YouTubeUrl);
+
+    [HttpPost("{id:guid}/edit")]
+    public async Task<IActionResult> Edit(Guid id, [FromBody] EditRequest request, CancellationToken ct)
+    {
+        var videoId = YouTube.VideoId(request.YouTubeUrl);
+        if (videoId is null) return BadRequest(new { Code = "invalidYouTubeUrl" });
+        await RefreshGate.WaitAsync(ct);
+        try { return Ok(new { (await themes.Process(id, true, ct, youtubeUrl: "https://www.youtube.com/watch?v=" + videoId)).Result }); }
         catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
         catch (Exception e) when (e is IOException or SearchFailure) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
         finally { RefreshGate.Release(); }

@@ -182,8 +182,10 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         }
     }
 
-    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null)
+    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null, string? youtubeUrl = null)
     {
+        var manualVideoId = youtubeUrl is null ? null : YouTube.VideoId(youtubeUrl) ?? throw new InvalidOperationException("Invalid YouTube URL.");
+        if (manualVideoId is not null && !replacement) throw new InvalidOperationException("No managed theme to refresh.");
         var gate = _locks.GetOrAdd(id, _ => new SemaphoreSlim(1));
         await gate.WaitAsync(ct);
         try
@@ -223,7 +225,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
             var minimumMatchStrength = Plugin.Instance.Configuration.EffectiveMinimumMatchStrength;
             var excludedIds = store.Read(s => new HashSet<string>(s.ExcludedVideos.GetValueOrDefault(id) ?? []));
             var excludedRecordings = store.Read(s => new HashSet<string>(s.ExcludedRecordings.GetValueOrDefault(id) ?? []));
-            if (replacement)
+            if (replacement && manualVideoId is null)
             {
                 excludedIds.Add(existing!.VideoId);
                 excludedRecordings.Add(existing.Recording);
@@ -260,6 +262,20 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 });
                 Refresh(item);
                 return new(result);
+            }
+            if (manualVideoId is not null)
+            {
+                reportStage?.Invoke("stageSearching");
+                var manual = await YouTube.ManualChoice(manualVideoId, item is BoxSet ? franchise! : work, ct);
+                var temporary = Path.Combine(folder, ".theme-" + Guid.NewGuid().ToString("N") + ".mp3");
+                try
+                {
+                    reportStage?.Invoke("stageDownloading");
+                    await Audio.Convert(manual, temporary, encoder, Plugin.Instance.Configuration.EffectiveTargetLufs, ct,
+                        reportStage is null ? null : () => reportStage("stageProcessing"));
+                    return await Install(temporary, manual);
+                }
+                finally { if (File.Exists(temporary)) File.Delete(temporary); }
             }
             if (!replacement && item is Series && Plugin.Instance.Configuration.TvThemeUrlTemplate is { } template &&
                 item.TryGetProviderId(MetadataProvider.Tvdb, out var tvdbId) && TvThemeSource.Url(template, tvdbId) is { } url)

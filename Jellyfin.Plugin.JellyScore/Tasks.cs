@@ -137,18 +137,18 @@ public sealed class ScanStatus
             var knownRemaining = KnownTotal - KnownProcessed;
             var otherProcessed = Processed - KnownProcessed;
             var otherRemaining = Total - KnownTotal - otherProcessed;
-            var known = Average(KnownSeconds, KnownProcessed, PriorKnownSecondsPerItem);
-            var other = Average(OtherSeconds, otherProcessed, PriorOtherSecondsPerItem);
-            if (knownRemaining > 0 && known is null || otherRemaining > 0 && other is null) return null;
+            var known = Average(KnownSeconds, KnownProcessed, PriorKnownSecondsPerItem, JellyScoreConstants.ScanDefaultKnownSecondsPerItem);
+            var other = Average(OtherSeconds, otherProcessed, PriorOtherSecondsPerItem, JellyScoreConstants.ScanDefaultOtherSecondsPerItem);
             var current = CurrentKnown ? known : other;
-            var stalledFor = Math.Max(0, (DateTimeOffset.UtcNow - LastCompletedAt).TotalSeconds - (current ?? 0));
-            return knownRemaining * (known ?? 0) + otherRemaining * (other ?? 0) + stalledFor;
+            var stalledFor = Math.Max(0, (DateTimeOffset.UtcNow - LastCompletedAt).TotalSeconds - current);
+            return knownRemaining * known + otherRemaining * other + stalledFor;
         }
     }
 
-    private static double? Average(double seconds, int count, double? prior) => prior is > 0 and < JellyScoreConstants.ScanMaximumPriorSecondsPerItem
+    private static double Average(double seconds, int count, double? prior, double initial) => prior is > 0 and < JellyScoreConstants.ScanMaximumPriorSecondsPerItem
         ? (seconds + JellyScoreConstants.ScanPriorItems * prior.Value) / (count + JellyScoreConstants.ScanPriorItems)
-        : count >= JellyScoreConstants.ScanPriorItems ? seconds / count : null;
+        : count >= JellyScoreConstants.ScanPriorItems ? seconds / count
+        : (seconds + (JellyScoreConstants.ScanPriorItems - count) * initial) / JellyScoreConstants.ScanPriorItems;
 }
 // ReSharper restore UnusedAutoPropertyAccessor.Global
 

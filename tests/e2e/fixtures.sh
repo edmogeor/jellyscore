@@ -29,8 +29,8 @@ series() {
     /usr/lib/jellyfin-ffmpeg/ffmpeg -loglevel error -f lavfi -i color=c=black:s=320x240:r=1 -t 1 -c:v mpeg4 -y "$folder/Season 01/S01E01 Pilot.mp4"
   fi
   if [ ! -e "$folder/tvshow.nfo" ]; then
-    printf '<tvshow><title>%s</title><year>%s</year><uniqueid type="tvdb">73244</uniqueid><lockdata>true</lockdata></tvshow>\n' "$1" "$2" > "$folder/tvshow.nfo"
+    printf '<tvshow><title>%s</title><year>%s</year><uniqueid type="tvdb">71470</uniqueid><lockdata>true</lockdata></tvshow>\n' "$1" "$2" > "$folder/tvshow.nfo"
   fi
 }
-series 'The Office (US)' 2005
+series 'Star Trek: The Next Generation' 1987
 SH

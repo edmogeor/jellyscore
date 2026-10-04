@@ -5,6 +5,23 @@
   data-require="emby-input,emby-button,emby-checkbox"
 >
   <style>
+    #themeSongsEdit .formDialogFooter {
+      display: flex;
+      gap: 0.5rem;
+    }
+    #themeSongsEdit .formDialogFooterItem {
+      flex: 1;
+      width: auto;
+      margin: 0;
+    }
+    #themeSongsEdit .button-cancel {
+      background: var(--jf-palette-error-main);
+      color: var(--jf-palette-error-contrastText, white);
+    }
+    #themeSongsEdit .button-cancel:hover {
+      background: var(--jf-palette-error-dark);
+    }
+    #themeSongsEdit .formDialogHeaderTitle,
     #themeSongsConfirm .formDialogHeaderTitle {
       display: block;
       margin: 0 !important;
@@ -908,6 +925,94 @@
           confirming = false;
         }
       };
+      const editSource = async (item) => {
+        if (confirming) return null;
+        confirming = true;
+        const dialogHelper = Dashboard.dialogHelper;
+        let dialog;
+        try {
+          dialog = dialogHelper.createDialog({
+            id: "themeSongsEdit",
+            removeOnClose: true,
+            scrollY: false,
+          });
+          dialog.classList.add("formDialog", "dialog-fullscreen-lowres");
+          dialog.setAttribute("role", "dialog");
+          dialog.setAttribute("aria-modal", "true");
+          dialog.setAttribute("aria-labelledby", "themeSongsEditTitle");
+          dialog.innerHTML = `
+            <div class="formDialogHeader">
+              <h3 id="themeSongsEditTitle" class="formDialogHeaderTitle"></h3>
+            </div>
+            <div class="formDialogContent smoothScrollY">
+              <div class="dialogContentInner dialogContentInner-mini">
+                <form>
+                  <div class="inputContainer">
+                    <input is="emby-input" type="url" required label="" />
+                    <p class="fieldDescription"></p>
+                  </div>
+                  <div class="formDialogFooter">
+                    <button is="emby-button" type="submit" class="raised button-submit block formDialogFooterItem"></button>
+                    <button is="emby-button" type="button" class="raised button-cancel block formDialogFooterItem"></button>
+                  </div>
+                </form>
+              </div>
+            </div>`;
+          dialog.querySelector("h3").textContent = t("editThemeFor", item.Name);
+          dialog.querySelector(".fieldDescription").textContent =
+            t("editThemeHelp");
+          const input = dialog.querySelector("input");
+          if (input.label) input.label(t("youTubeUrl"));
+          else input.setAttribute("label", t("youTubeUrl"));
+          input.value = item.YouTubeUrl || "";
+          input.placeholder = "https://www.youtube.com/watch?v=…";
+          dialog.querySelector(".button-submit").textContent = t("confirmEdit");
+          const cancel = dialog.querySelector(".button-cancel");
+          cancel.textContent = t("cancel");
+          cancel.onclick = () => dialogHelper.close(dialog);
+          let result = null;
+          input.oninput = () => input.setCustomValidity("");
+          dialog.querySelector("form").onsubmit = (event) => {
+            event.preventDefault();
+            const url = new URL(input.value.trim());
+            const id =
+              url.hostname === "youtu.be"
+                ? url.pathname.slice(1)
+                : [
+                      "youtube.com",
+                      "www.youtube.com",
+                      "m.youtube.com",
+                      "music.youtube.com",
+                    ].includes(url.hostname)
+                  ? url.pathname === "/watch"
+                    ? url.searchParams.getAll("v").length === 1
+                      ? url.searchParams.get("v")
+                      : null
+                    : /^\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})$/.exec(
+                        url.pathname,
+                      )?.[2]
+                  : null;
+            if (
+              !["https:", "http:"].includes(url.protocol) ||
+              url.username ||
+              url.password ||
+              url.port ||
+              !/^[a-zA-Z0-9_-]{11}$/.test(id || "")
+            ) {
+              input.setCustomValidity(t("invalidYouTubeUrl"));
+              input.reportValidity();
+              return;
+            }
+            result = "https://www.youtube.com/watch?v=" + id;
+            setTimeout(() => dialogHelper.close(dialog), 300);
+          };
+          await dialogHelper.open(dialog);
+          return result;
+        } finally {
+          dialog?.remove();
+          confirming = false;
+        }
+      };
       const request = async (path, options = {}) => {
         const response = await fetch(ApiClient.getUrl("ThemeSongs/" + path), {
           ...options,
@@ -945,7 +1050,16 @@
         ).toLowerCase();
         for (const value of new Set([locale, locale.split("-")[0], "en-us"])) {
           try {
-            strings = await request("strings/" + encodeURIComponent(value));
+            const translated = await request(
+              "strings/" + encodeURIComponent(value),
+            );
+            strings =
+              value === "en-us"
+                ? translated
+                : {
+                    ...(await request("strings/en-us")),
+                    ...translated,
+                  };
             localize();
             return;
           } catch (e) {
@@ -1118,8 +1232,10 @@
           refresh.setAttribute("aria-label", t("refreshThemeFor", item.Name));
           refresh.dataset.themeAction = t("refreshTheme");
           refresh.dataset.requiresDownloader = "true";
-          refresh.onclick = () => {
+          const queueReprocessing = (youtubeUrl = null) => {
             if (
+              scanRunning ||
+              bulkBusy ||
               downloaderFailed ||
               row.dataset.busy === "true" ||
               refreshingItems.has(item.ItemId)
@@ -1134,7 +1250,15 @@
               setBusy(t("refreshing"));
               try {
                 const result = (
-                  await request(item.ItemId + "/refresh", { method: "POST" })
+                  await request(
+                    item.ItemId + (youtubeUrl ? "/edit" : "/refresh"),
+                    {
+                      method: "POST",
+                      ...(youtubeUrl
+                        ? { body: JSON.stringify({ YouTubeUrl: youtubeUrl }) }
+                        : {}),
+                    },
+                  )
                 ).Result;
                 toast(
                   t(
@@ -1159,6 +1283,36 @@
             };
             refreshQueue = refreshQueue.then(run, run);
           };
+          refresh.onclick = () => queueReprocessing();
+          const edit = document.createElement("button", "emby-button");
+          edit.className = "emby-button";
+          edit.append(icon("edit"));
+          edit.setAttribute("aria-label", t("editThemeFor", item.Name));
+          edit.dataset.themeAction = t("editTheme");
+          edit.dataset.requiresDownloader = "true";
+          edit.onclick = async () => {
+            if (
+              scanRunning ||
+              bulkBusy ||
+              downloaderFailed ||
+              refreshingItems.has(item.ItemId)
+            )
+              return;
+            try {
+              const url = await editSource(item);
+              if (
+                !url ||
+                !visible ||
+                scanRunning ||
+                bulkBusy ||
+                !row.isConnected
+              )
+                return;
+              queueReprocessing(url);
+            } catch (e) {
+              showRowError(e);
+            }
+          };
           const remove = document.createElement("button", "emby-button");
           remove.className = "emby-button";
           remove.append(icon("delete"));
@@ -1182,7 +1336,7 @@
               setBusy("");
             }
           };
-          actions.append(view, refresh, remove);
+          actions.append(view, edit, refresh, remove);
           row.append(theme, added, actions);
           container.append(row);
         }

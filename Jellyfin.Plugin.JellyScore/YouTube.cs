@@ -283,6 +283,37 @@ public sealed class YouTube
         return videos;
     }
 
+    internal static string? VideoId(string? url)
+    {
+        if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http") ||
+            !string.IsNullOrEmpty(uri.UserInfo) || !uri.IsDefaultPort) return null;
+        string? id = null;
+        if (uri.Host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase)) id = uri.AbsolutePath.TrimStart('/');
+        else if (new[] { "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com" }.Contains(uri.Host, StringComparer.OrdinalIgnoreCase))
+        {
+            if (uri.AbsolutePath == "/watch")
+            {
+                var values = uri.Query.TrimStart('?').Split('&').Where(part => part.StartsWith("v=", StringComparison.Ordinal)).ToArray();
+                if (values.Length == 1) id = values[0][2..];
+            }
+            else
+            {
+                var parts = uri.AbsolutePath.Split('/');
+                if (parts.Length == 3 && parts[1] is "shorts" or "embed" or "live") id = parts[2];
+            }
+        }
+        return id is not null && Regex.IsMatch(id, "^[a-zA-Z0-9_-]{11}$") ? id : null;
+    }
+
+    internal static async Task<Choice> ManualChoice(string id, Work work, CancellationToken ct)
+    {
+        var video = await Recheck(id, ct);
+        if (video.Id != id || video.Seconds is not { } seconds || seconds is < JellyScoreConstants.MinimumThemeSeconds or > JellyScoreConstants.MaximumThemeSeconds)
+            throw new DownloadFailure("Duration is missing or outside the theme range");
+        var matched = Matcher.Evaluate(work, video);
+        return new Choice(video, matched?.Recording ?? "youtube:" + id, matched?.Score ?? 0, "YouTube source selected by administrator");
+    }
+
     private static async Task<Video> Recheck(string id, CancellationToken ct)
     {
         if (!Regex.IsMatch(id, "^[a-zA-Z0-9_-]{11}$")) throw new SearchFailure("Invalid source video ID.");

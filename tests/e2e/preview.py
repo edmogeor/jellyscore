@@ -26,7 +26,7 @@ for attempt in range(60):
         time.sleep(2)
         continue
     indexed = {item["Name"] for item in items["Items"]}
-    if {"Dune", "Harry Potter and the Sorcerer's Stone", "User Theme", "The Office (US)"} <= indexed:
+    if {"Dune", "Harry Potter and the Sorcerer's Stone", "User Theme", "Star Trek: The Next Generation"} <= indexed:
         break
     if attempt % 5 == 0:
         print(f"Waiting for preview media to be indexed ({len(items['Items'])} items)...", flush=True)

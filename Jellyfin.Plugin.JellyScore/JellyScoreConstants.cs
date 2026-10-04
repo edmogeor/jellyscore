@@ -95,6 +95,8 @@ internal static class JellyScoreConstants
     internal const int MetadataRetryDelaySeconds = 30;
     internal const int MetadataRetryAttempts = 3;
     internal const int ScanPriorItems = 3;
+    internal const int ScanDefaultKnownSecondsPerItem = 1;
+    internal const int ScanDefaultOtherSecondsPerItem = 60;
     internal const int ScanMaximumPriorSecondsPerItem = 3600;
     internal const int ScanBatchSize = 100;
     internal const int ScanRecentIssues = 50;

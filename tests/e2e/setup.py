@@ -31,7 +31,7 @@ def request(method, path, body=None, token=None, timeout=5):
 def wizard():
     for _ in range(60):
         status, info = request("GET", "/System/Info/Public")
-        if status == 200:
+        if status == 200 and isinstance(info, dict) and "StartupWizardCompleted" in info:
             break
         time.sleep(2)
     else:

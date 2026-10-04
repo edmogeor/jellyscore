@@ -29,6 +29,18 @@ foreach (var locale in new[] { "da", "de", "en-us", "es", "fi", "fr", "it", "ja"
 }
 
 var original = video("aaaaaaaaaaa", "Dune Main Theme", licensed);
+foreach (var url in new[] {
+    "https://www.youtube.com/watch?v=aaaaaaaaaaa", "https://youtu.be/aaaaaaaaaaa?t=10",
+    "https://m.youtube.com/watch?v=aaaaaaaaaaa&list=playlist", "https://music.youtube.com/watch?v=aaaaaaaaaaa",
+    "https://youtube.com/shorts/aaaaaaaaaaa", "https://www.youtube.com/embed/aaaaaaaaaaa", "https://youtube.com/live/aaaaaaaaaaa"
+}) check(YouTube.VideoId(url) == "aaaaaaaaaaa", "YouTube video links resolve to a canonical video ID: " + url);
+foreach (var url in new string?[] {
+    null, "", "aaaaaaaaaaa", "https://example.com/theme.mp3", "file:///theme.mp3",
+    "https://youtube.com.evil.example/watch?v=aaaaaaaaaaa", "https://youtube.com@evil.example/watch?v=aaaaaaaaaaa",
+    "https://evil.example@youtube.com/watch?v=aaaaaaaaaaa", "https://youtube.com:8443/watch?v=aaaaaaaaaaa",
+    "https://youtube.com/playlist?list=aaaaaaaaaaa", "https://youtube.com/watch?v=short",
+    "https://youtu.be/aaaaaaaaaaa/extra", "https://youtube.com/watch?v=aaaaaaaaaaa&v=bbbbbbbbbbb"
+}) check(YouTube.VideoId(url) is null, "custom, ambiguous, and non-video URLs cannot be edited sources: " + url);
 check(Matcher.Evaluate(work, original) is { Score: > 0 }, "soundtrack theme accepted");
 check(Matcher.Evaluate(work, original with { UploadDate = new DateOnly(2019, 12, 31) }) is null,
     "film uploads predating the previous calendar year are rejected");
@@ -366,11 +378,14 @@ check(Audio.Filter(4, 10, false, true) == "volume=4dB,afade=t=out:st=9:d=1" &&
     Audio.Filter(4, 10, true, false) == "volume=4dB,afade=t=in:d=1" &&
     Audio.Filter(4, 10, false, false) == "volume=4dB", "only missing fades are applied");
 var scanEstimate = new ScanStatus { Running = true, Total = 18, KnownTotal = 9, LastCompletedAt = DateTimeOffset.UtcNow };
-check(scanEstimate.RemainingSeconds is null, "a first scan does not invent a time estimate without samples");
+check(scanEstimate.RemainingSeconds is > 548 and < 550, "a first scan estimates ownership checks and searches separately using defaults");
 scanEstimate.KnownProcessed = 3;
 scanEstimate.KnownSeconds = 6;
 scanEstimate.Processed = 3;
-check(scanEstimate.RemainingSeconds is null, "known theme timings cannot predict unsearched items");
+check(scanEstimate.RemainingSeconds is > 551 and < 553, "observed ownership timings do not replace the default for unsearched items");
+scanEstimate.Processed = 4;
+scanEstimate.OtherSeconds = 30;
+check(scanEstimate.RemainingSeconds is > 411 and < 413, "initial search samples gradually replace the first-run default");
 scanEstimate.Processed = 6;
 scanEstimate.OtherSeconds = 90;
 check(scanEstimate.RemainingSeconds is > 191 and < 193, "remaining known themes and searches use their own observed durations");
@@ -379,6 +394,10 @@ scanEstimate.LastCompletedAt = DateTimeOffset.UtcNow.AddSeconds(-12);
 check(scanEstimate.RemainingSeconds is > 201 and < 203, "an overdue item adds its excess time only once");
 scanEstimate.Running = false;
 check(scanEstimate.RemainingSeconds is null, "completed scans do not show an ETA");
+var priorEstimate = new ScanStatus { Running = true, Total = 2, KnownTotal = 1, LastCompletedAt = DateTimeOffset.UtcNow,
+    PriorKnownSecondsPerItem = 2, PriorOtherSecondsPerItem = 30 };
+check(priorEstimate.RemainingSeconds is > 31 and < 33, "saved timings take precedence over first-run defaults");
+check(new ScanStatus { Running = true }.RemainingSeconds is null, "empty scans have no ETA");
 check(!File.Exists("dist/JellyScore.zip") || System.IO.Compression.ZipFile.OpenRead("dist/JellyScore.zip").Entries.Select(e => e.Name).Order().SequenceEqual(
     new[] { "Jellyfin.Plugin.JellyScore.dll", "SHA2-256SUMS", "deno-checksums", "deno-version", "yt-dlp-version" }.Order()),
     "plugin archive contains only the DLL and pinned release metadata");

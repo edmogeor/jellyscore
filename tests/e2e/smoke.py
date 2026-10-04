@@ -126,6 +126,9 @@ assert status == 200 and strings["scanLibraries"] == "Scan libraries", f"English
 assert strings["automatic"] == "Automatically process new items" and strings["scanOnLibraryRefresh"] == "Scan after Jellyfin scans the media library"
 assert strings["preferFranchiseThemes"] == "Prefer franchise themes for movies in TMDb collections", "franchise setting has English copy"
 english_strings = strings
+for url in ("https://example.com/theme.mp3", "https://youtube.com.evil.example/watch?v=aaaaaaaaaaa", "https://www.youtube.com/playlist?list=test", ""):
+    status, error = request("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit", {"youTubeUrl": url}, token)
+    assert status == 400 and field(error, "code") == "invalidYouTubeUrl", f"custom or invalid edit source rejected: {status} {error}"
 status, strings = request("GET", "/ThemeSongs/strings/fr", token=token)
 assert status == 200 and strings["scanLibraries"] == "Analyser les bibliothèques", f"French translations: {status} {strings}"
 assert strings["scanOnLibraryRefresh"], "French scan trigger translation missing"
@@ -219,7 +222,7 @@ for _ in range(60):
 else:
     raise AssertionError("JellyScore did not run after Jellyfin's library scan")
 assert_settings(token, False, [])
-for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/strings/en-us"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry")]:
+for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/strings/en-us"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit")]:
     status, _ = request(method, path)
     assert status in (401, 403), f"unauthorized {path}: {status}"
 print("Jellyfin 12 plugin smoke checks passed")
@@ -252,7 +255,7 @@ for attempt in range(30):
         ("Movie", "Harry Potter and the Sorcerer's Stone", 2001),
         ("Movie", "Dune", 2021),
         ("Movie", "User Theme", 2000),
-        ("Series", "The Office (US)", 2005),
+        ("Series", "Star Trek: The Next Generation", 1987),
         ("Movie", "Unselected Example", 1999),
     }.issubset(indexed):
         break
@@ -292,6 +295,8 @@ assert all(field(item, "itemId") != user_theme["Id"] for item in field(downloads
 )
 status, error = request("DELETE", f"/ThemeSongs/{user_theme['Id']}", token=token)
 assert status == 409 and field(error, "code") == "themeUnavailable", f"delete user-provided theme: {status} {error}"
+status, error = request("POST", f"/ThemeSongs/{user_theme['Id']}/edit", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}, token)
+assert status == 409 and field(error, "code") == "themeUnavailable", f"edit user-provided theme: {status} {error}"
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "cmp", "-s",
                 "/tmp/user-theme-original", "/media/movies/User Theme (2000)/theme.mp3"], check=True)
 dune = next((item for item in field(downloads, "items") if field(item, "name") == "Dune"), None)
@@ -304,10 +309,13 @@ if theme is None and field(first_scan, "failed"):
 assert theme is not None, f"test movie theme not downloaded: {downloads}"
 if source_template:
     series_theme = next((item for item in field(downloads, "items") if field(item, "kind") == "Series"), None)
-    assert series_theme is not None and field(series_theme, "source") == source_template.replace("{tvdbId}", "73244"), (
+    assert series_theme is not None and field(series_theme, "source") == source_template.replace("{tvdbId}", "71470"), (
         f"TV theme URL was not selected before YouTube: {downloads}"
     )
+    assert field(series_theme, "youTubeUrl") is None, f"custom TV source must not prefill the YouTube edit field: {series_theme}"
 assert field(theme, "source").startswith("https://www.youtube.com/watch?v="), theme
+assert field(theme, "youTubeUrl") == field(theme, "source"), f"YouTube edit field must prefill the existing source: {theme}"
+original_source = field(theme, "source")
 assert field(theme, "score") > 0, theme
 assert field(theme, "status") == "Active", theme
 with open("dist/universal/yt-dlp-version", encoding="utf-8") as release:
@@ -324,6 +332,11 @@ status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 theme = next((item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"])), None)
 assert status == 200 and theme is not None, f"refresh lost managed theme: {downloads}"
 assert field(theme, "status") == "Active", downloads
+status, edited = request("POST", f"/ThemeSongs/{movie['Id']}/edit", {"youTubeUrl": original_source}, token=token, timeout=300)
+assert status == 200 and field(edited, "result") == "Replaced", f"reprocess explicitly selected, previously excluded source: {status} {edited}"
+status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+theme = next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"]))
+assert field(theme, "source") == original_source and field(theme, "status") == "Active", f"edited source not installed: {theme}"
 status, _ = request("DELETE", f"/ThemeSongs/{movie['Id']}", token=token)
 assert status == 204, f"delete managed theme: {status}"
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
@@ -349,6 +362,8 @@ subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T
                 field(dune, "path"), "/tmp/edited-theme-original"], check=True)
 status, error = request("POST", f"/ThemeSongs/{field(dune, 'itemId')}/refresh", token=token)
 assert status == 409 and field(error, "code") == "themeChanged", f"refresh externally edited theme: {status} {error}"
+status, error = request("POST", f"/ThemeSongs/{field(dune, 'itemId')}/edit", {"youTubeUrl": field(dune, "source")}, token)
+assert status == 409 and field(error, "code") == "themeChanged", f"edit externally modified theme: {status} {error}"
 status, error = request("DELETE", f"/ThemeSongs/{field(dune, 'itemId')}", token=token)
 assert status == 409 and field(error, "code") == "themeChanged", f"delete externally edited theme: {status} {error}"
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "cmp", "-s",
