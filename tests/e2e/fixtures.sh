@@ -9,9 +9,11 @@ movie() {
     /usr/lib/jellyfin-ffmpeg/ffmpeg -loglevel error -f lavfi -i color=c=black:s=320x240:r=1 -t 1 -c:v mpeg4 -y "$folder/$1.mp4"
   fi
   tmdb=''
+  collection=''
+  if [ "$1" = Dune ]; then collection='<set><name>Dune Collection</name></set>'; fi
   if [ -n "${5:-}" ]; then tmdb="<uniqueid type=\"tmdb\">$5</uniqueid>"; fi
   if [ ! -e "$folder/movie.nfo" ]; then
-    printf '<movie><title>%s</title><originaltitle>%s</originaltitle><year>%s</year>%s<lockdata>true</lockdata></movie>\n' "$2" "$2" "$3" "$tmdb" > "$folder/movie.nfo"
+    printf '<movie><title>%s</title><originaltitle>%s</originaltitle><year>%s</year>%s%s<lockdata>true</lockdata></movie>\n' "$2" "$2" "$3" "$tmdb" "$collection" > "$folder/movie.nfo"
   fi
 }
 movie "Harry Potter and the Sorcerer's Stone" 'Harry Potter and the Sorcerer&apos;s Stone' 2001

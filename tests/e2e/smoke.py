@@ -126,6 +126,13 @@ assert status == 200 and strings["scanLibraries"] == "Scan libraries", f"English
 assert strings["automatic"] == "Automatically process new items" and strings["scanOnLibraryRefresh"] == "Scan after Jellyfin scans the media library"
 assert strings["preferFranchiseThemes"] == "Prefer franchise themes for movies in TMDb collections", "franchise setting has English copy"
 english_strings = strings
+for source, mode, url, code in (("other", "automatic", None, "invalidAddRequest"),
+                                ("custom", "url", "https://youtu.be/aaaaaaaaaaa", "invalidAddRequest"),
+                                ("youtube", "url", "https://example.com/theme.mp3", "invalidYouTubeUrl"),
+                                ("youtube", "automatic", "https://youtu.be/aaaaaaaaaaa", "invalidAddRequest")):
+    status, error = request("POST", "/ThemeSongs/downloads", {"itemId": "00000000-0000-0000-0000-000000000001",
+                           "source": source, "mode": mode, "youTubeUrl": url}, token)
+    assert status == 400 and field(error, "code") == code, f"invalid manual addition rejected: {status} {error}"
 for url in ("https://example.com/theme.mp3", "https://youtube.com.evil.example/watch?v=aaaaaaaaaaa", "https://www.youtube.com/playlist?list=test", ""):
     status, error = request("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit", {"youTubeUrl": url}, token)
     assert status == 400 and field(error, "code") == "invalidYouTubeUrl", f"custom or invalid edit source rejected: {status} {error}"
@@ -194,6 +201,8 @@ status, before = request("GET", "/ThemeSongs/scan", token=token)
 assert status == 200, f"read scan status: {status}"
 status, _ = request("POST", "/ThemeSongs/settings", {"enabled": True, "libraries": []}, token)
 assert status == 204, f"clear selected libraries: {status}"
+status, selectable = request("GET", "/ThemeSongs/items", token=token)
+assert status == 200 and field(selectable, "items") == [] and not field(selectable, "hasMore"), f"empty selection must offer no manual items: {selectable}"
 status, tasks = request("GET", "/ScheduledTasks", token=token)
 assert status == 200, f"list scheduled tasks: {status}"
 previous_refresh = next(task for task in tasks if field(task, "key") == "RefreshLibrary")["LastExecutionResult"]
@@ -222,7 +231,7 @@ for _ in range(60):
 else:
     raise AssertionError("JellyScore did not run after Jellyfin's library scan")
 assert_settings(token, False, [])
-for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/strings/en-us"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit")]:
+for method, path in [("GET", "/ThemeSongs/downloads"), ("POST", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/items"), ("DELETE", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/strings/en-us"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit")]:
     status, _ = request(method, path)
     assert status in (401, 403), f"unauthorized {path}: {status}"
 print("Jellyfin 12 plugin smoke checks passed")
@@ -287,6 +296,40 @@ if source_template:
     assert status == 204, f"enable test TV theme source: {status}"
 movie = next(item for item in items["Items"] if "Sorcerer" in item["Name"])
 user_theme = next(item for item in items["Items"] if item["Name"] == "User Theme")
+series_item = next(item for item in items["Items"] if item["Type"] == "Series")
+status, selectable = request("GET", "/ThemeSongs/items", token=token)
+assert status == 200 and {field(item, "name") for item in field(selectable, "items")} == {
+    "Dune", "Harry Potter and the Sorcerer's Stone", "Star Trek: The Next Generation"
+}, f"manual selection must omit existing user themes and unselected libraries: {status} {selectable}"
+status, filtered = request("GET", "/ThemeSongs/items?search=Sorcerer", token=token)
+assert status == 200 and len(field(filtered, "items")) == 1 and field(field(filtered, "items")[0], "customSourceAvailable") is False, (
+    f"item search and movie custom-source eligibility: {status} {filtered}"
+)
+status, selectable_page = request("GET", "/ThemeSongs/items?page=2", token=token)
+assert status == 200 and field(selectable_page, "items") == [], f"manual selection pagination: {selectable_page}"
+status, error = request("POST", "/ThemeSongs/downloads", {"itemId": user_theme["Id"], "source": "youtube", "mode": "automatic"}, token)
+assert status == 409 and field(error, "code") == "themeAlreadyExists", f"manual add must preserve a user theme: {status} {error}"
+status, error = request("POST", "/ThemeSongs/downloads", {"itemId": movie["Id"], "source": "custom", "mode": "automatic"}, token)
+assert status == 409 and field(error, "code") == "customSourceUnavailable", f"movies cannot use configured TV sources: {status} {error}"
+status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": library_ids,
+                                                 "tvThemeUrlTemplate": "https://example.com/themes/{tvdbId}.mp3"}, token)
+assert status == 204, f"set test custom source: {status}"
+status, selectable = request("GET", "/ThemeSongs/items?search=Star", token=token)
+assert status == 200 and field(field(selectable, "items")[0], "customSourceAvailable") is True, f"eligible series expose saved custom source: {selectable}"
+status, error = request("POST", "/ThemeSongs/downloads", {"itemId": series_item["Id"], "source": "custom", "mode": "automatic"}, token, timeout=120)
+assert status == 422 and field(error, "code") == "downloadFailed", f"explicit custom source must fail without falling back to YouTube: {status} {error}"
+status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+assert field(downloads, "allTotal") == 0, f"failed custom addition installed a theme: {downloads}"
+status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": True, "libraries": library_ids,
+                                                 "tvThemeUrlTemplate": source_template or ""}, token)
+assert status == 204, f"restore custom source selection: {status}"
+dune_item = next(item for item in items["Items"] if item["Name"] == "Dune")
+status, added = request("POST", "/ThemeSongs/downloads", {"itemId": dune_item["Id"], "source": "youtube", "mode": "automatic"}, token, timeout=300)
+assert status == 200 and field(added, "result") == "Added", f"manual automatic YouTube addition: {status} {added}"
+status, error = request("POST", "/ThemeSongs/downloads", {"itemId": dune_item["Id"], "source": "youtube", "mode": "automatic"}, token)
+assert status == 409 and field(error, "code") == "themeAlreadyExists", f"manual add cannot replace a managed theme: {status} {error}"
+status, selectable = request("GET", "/ThemeSongs/items?search=Dune", token=token)
+assert status == 200 and field(selectable, "items") == [], f"managed downloads must leave the item picker: {selectable}"
 first_scan = scan_until(token, "added", expect_current=True)
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 assert status == 200, f"list themes: {status}"
@@ -349,6 +392,12 @@ for _ in range(30):
         break
     time.sleep(2)
 assert status == 200 and songs.get("TotalRecordCount") == 0, f"Jellyfin still sees deleted theme: {status} {songs}"
+status, selectable = request("GET", "/ThemeSongs/items?search=Sorcerer", token=token)
+assert status == 200 and len(field(selectable, "items")) == 1, f"deleted, suppressed items remain eligible for explicit additions: {selectable}"
+status, added = request("POST", "/ThemeSongs/downloads", {"itemId": movie["Id"], "source": "youtube", "mode": "url", "youTubeUrl": original_source}, token, timeout=300)
+assert status == 200 and field(added, "result") == "Added", f"manual URL addition retries a suppressed item and excluded source: {status} {added}"
+status, _ = request("DELETE", f"/ThemeSongs/{movie['Id']}", token=token)
+assert status == 204, f"delete explicitly added theme: {status}"
 status, _ = request("POST", f"/ThemeSongs/{movie['Id']}/refresh", token=token)
 assert status == 409, f"refresh deleted theme: {status}"
 scan_until(token)
@@ -386,6 +435,27 @@ for _ in range(30):
 assert status == 200 and all(field(item, "itemId") != field(removed, "itemId") for item in field(downloads, "items")), (
     f"removed series remains managed: {downloads}"
 )
+status, collection = request("POST", "/Collections?name=Dune%20Collection&ids=" + dune_item["Id"], token=token)
+assert status == 200, f"create physical collection fixture: {status} {collection}"
+collection_id = field(collection, "id")
+status, folders = request("GET", "/Library/VirtualFolders", token=token)
+collection_library = next((folder for folder in folders if field(folder, "collectionType") == "boxsets"), None)
+if collection_library is None:
+    status, _ = request("POST", "/Library/VirtualFolders?name=Collections&collectionType=boxsets&paths=/config/data/collections&refreshLibrary=false", {}, token)
+    assert status == 204, f"create Collections library: {status}"
+    status, folders = request("GET", "/Library/VirtualFolders", token=token)
+    collection_library = next(folder for folder in folders if field(folder, "collectionType") == "boxsets")
+status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False,
+                    "libraries": library_ids + [field(collection_library, "itemId")]}, token)
+assert status == 204, f"select Collections library: {status}"
+status, selectable = request("GET", "/ThemeSongs/items?search=Dune", token=token)
+collection_candidate = next((item for item in field(selectable, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(collection_id)), None)
+assert status == 200 and collection_candidate is not None and field(collection_candidate, "kind") == "Collection" and not field(collection_candidate, "customSourceAvailable"), (
+    f"eligible physical collection is searchable and YouTube-only: {status} {selectable}"
+)
+status, added = request("POST", "/ThemeSongs/downloads", {"itemId": collection_id, "source": "youtube", "mode": "url",
+                        "youTubeUrl": field(dune, "source")}, token, timeout=300)
+assert status == 200 and field(added, "result") == "Added", f"manual collection URL addition: {status} {added}"
 status, filtered = request("GET", "/ThemeSongs/downloads?search=no-such-theme", token=token)
 assert status == 200 and field(filtered, "total") == 0 and field(filtered, "allTotal") > 0, f"bulk action must include filtered-out themes: {filtered}"
 status, deleted = request("DELETE", "/ThemeSongs/downloads", token=token)
@@ -398,4 +468,4 @@ subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T
                 "/tmp/user-theme-original", "/media/movies/User Theme (2000)/theme.mp3"], check=True)
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "cmp", "-s",
                 "/tmp/edited-theme-original", field(dune, "path")], check=True)
-print("Movie and series scan, refresh, delete, bulk delete, and stale-record cleanup passed")
+print("Movie, series, and collection additions, scan, refresh, delete, bulk delete, and stale-record cleanup passed")

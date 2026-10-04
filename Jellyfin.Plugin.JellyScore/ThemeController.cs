@@ -89,6 +89,36 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
         return new { result.Deleted, result.Skipped };
     }
 
+    [HttpGet("items")]
+    public object Items([FromQuery] string? search = null, [FromQuery] int page = 1)
+    {
+        var result = themes.ManualItems(search, page);
+        return new { result.Items, result.HasMore };
+    }
+
+    public sealed record AddRequest(Guid ItemId, string? Source, string? Mode, string? YouTubeUrl);
+
+    [HttpPost("downloads")]
+    public async Task<IActionResult> Add([FromBody] AddRequest request, CancellationToken ct)
+    {
+        if (request.ItemId == Guid.Empty || request.Source is not ("youtube" or "custom") || request.Mode is not ("automatic" or "url") ||
+            request.Source == "custom" && request.Mode != "automatic" || request.Mode == "automatic" && !string.IsNullOrEmpty(request.YouTubeUrl))
+            return BadRequest(new { Code = "invalidAddRequest" });
+        var videoId = request.Mode == "url" ? YouTube.VideoId(request.YouTubeUrl) : null;
+        if (request.Mode == "url" && videoId is null) return BadRequest(new { Code = "invalidYouTubeUrl" });
+        await RefreshGate.WaitAsync(ct);
+        try
+        {
+            var result = await themes.Process(request.ItemId, false, ct,
+                youtubeUrl: videoId is null ? null : "https://www.youtube.com/watch?v=" + videoId, addSource: request.Source);
+            if (result.Result == "Already themed") return Conflict(new { Code = "themeAlreadyExists" });
+            return Ok(new { result.Result, result.ReasonCode });
+        }
+        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "addFailed") }); }
+        catch (Exception e) when (e is IOException or SearchFailure) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "addFailed") }); }
+        finally { RefreshGate.Release(); }
+    }
+
     [HttpGet("scan")]
     public object Progress() => scan.Status;
 
@@ -141,8 +171,10 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
         "Another theme appeared. The file was left untouched." => "anotherTheme",
         "No managed theme to refresh." or "No managed theme." or "Item no longer exists." => "themeUnavailable",
         "Item is not in a selected library." or "Unsupported item." or "Movie needs a dedicated physical folder." or
+            "Collection has no matching movie or physical folder." or
             "Item needs a physical folder inside its library." or "Item folder is missing or unwritable." => "themeLocationUnavailable",
         "Item title is not ready; retry after metadata refresh." => "itemNotReady",
+        "Configured TV theme source is unavailable for this item." => "customSourceUnavailable",
         _ when e is SearchFailure => "searchFailed",
         _ when e is DownloadFailure => "downloadFailed",
         _ => fallback
