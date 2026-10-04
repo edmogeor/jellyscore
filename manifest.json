@@ -9,11 +9,11 @@
     "owner": "edmogeor",
     "versions": [
       {
-        "changelog": "### Added\n\n- Edit the YouTube source of a managed download and queue the selected video for reprocessing. Prefill existing YouTube sources and leave the field empty for themes from the configured TV URL source.\n- Translate the edit dialog, buttons, and validation messages into every supported language.\n\n### Improved\n\n- Use Jellyfin's native edit dialog with concise Save and Cancel actions, a red Cancel button on the right, and recovery from dialog setup errors.\n- Validate YouTube video URLs in both the page and management API. Keep the current theme intact until reprocessing succeeds and preserve all file-ownership checks.\n\n",
-        "checksum": "ff9c161b52c00ac3a73d793886ead45e",
+        "changelog": "### Added\n\n- Edit the YouTube source of a managed download and queue the selected video for reprocessing. Prefill existing YouTube sources and leave the field empty for themes from the configured TV URL source.\n- Translate the edit dialog, buttons, and validation messages into every supported language.\n\n### Improved\n\n- Use Jellyfin's native edit dialog with a red Cancel button on the left, Save on the right, and recovery from dialog setup errors.\n- Validate YouTube video URLs in both the page and management API. Keep the current theme intact until reprocessing succeeds and preserve all file-ownership checks.\n\n",
+        "checksum": "8b49d3cd17b6a404bacfceacef13638b",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.30.0/JellyScore.zip",
         "targetAbi": "12.0.0.0",
-        "timestamp": "2026-10-04T18:59:01Z",
+        "timestamp": "2026-10-04T19:10:28Z",
         "version": "0.1.30.0"
       },
       {
