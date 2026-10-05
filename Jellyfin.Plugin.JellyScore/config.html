@@ -626,15 +626,47 @@
     }
     #themeSongsPage .themeSearch input {
       padding-left: 44px;
+      padding-right: 52px;
+    }
+    #themeSongsPage #themeSearch::-webkit-search-cancel-button {
+      appearance: none;
+    }
+    #themeSongsPage #themeSearchClear {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: calc(1.5rem + 16px);
+      height: calc(1.5rem + 16px);
+      padding: 8px;
+      margin: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--jf-palette-text-secondary);
+    }
+    #themeSongsPage #themeSearchClear:hover {
+      background: var(--jf-palette-action-hover);
+    }
+    #themeSongsPage #themeSearchClear:focus-visible {
+      outline: 2px solid var(--jf-palette-primary-main);
+      outline-offset: -2px;
+    }
+    #themeSongsPage #themeSearchResults {
+      margin: 0.5rem 0 1rem;
+      font-size: 0.875rem;
     }
     #themeSongsPage .themeSearch > label {
       transform: translate(44px, 16px);
-      max-width: calc(100% - 56px);
+      max-width: calc(100% - 96px);
     }
     #themeSongsPage .themeSearch:focus-within > label,
     #themeSongsPage .themeSearch:has(input:not(:placeholder-shown)) > label {
       transform: translate(44px, 7px) scale(0.75);
-      max-width: calc((100% - 56px) / 0.75);
+      max-width: calc((100% - 96px) / 0.75);
     }
     #themeSongsPage .themeDownloadTools {
       display: flex;
@@ -1329,9 +1361,28 @@
                 aria-label="{{searchDownloads}}"
                 data-i18n-aria-label="searchDownloads"
               />
+              <button
+                is="emby-button"
+                id="themeSearchClear"
+                type="button"
+                aria-label="{{clearSearch}}"
+                data-i18n-aria-label="clearSearch"
+                title="{{clearSearch}}"
+                data-i18n-title="clearSearch"
+                hidden
+              >
+                <span class="material-icons" aria-hidden="true">close</span>
+              </button>
             </div>
           </div>
         </div>
+        <p
+          id="themeSearchResults"
+          class="fieldDescription"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
         <p id="themeEmpty" hidden>{{noDownloads}}</p>
         <p id="themeDownloadsLoading" class="themeLoading" role="status">
           <span class="material-icons" aria-hidden="true">sync</span
@@ -1400,8 +1451,18 @@
       /*__THEME_PLAYER_SCRIPT__*/
       const page = document.querySelector("#themeSongsPage");
       const $ = (selector) => page.querySelector(selector);
+      const sessionValue = (key, value) => {
+        try {
+          return value === undefined
+            ? sessionStorage.getItem("jellyscore." + key)
+            : sessionStorage.setItem("jellyscore." + key, value);
+        } catch {
+          return null;
+        }
+      };
       const tabs = [...page.querySelectorAll('[role="tab"]')];
       const selectTab = (selected) => {
+        sessionValue("tab", selected.id);
         for (const tab of tabs) {
           const active = tab === selected;
           tab.setAttribute("aria-selected", String(active));
@@ -1431,6 +1492,7 @@
           tabs[index].focus();
         };
       }
+      selectTab(tabs.find((tab) => tab.id === sessionValue("tab")) || tabs[0]);
       page.addEventListener("click", (event) => {
         page.querySelectorAll(".themeMenu[open]").forEach((menu) => {
           if (!menu.contains(event.target)) menu.open = false;
@@ -1458,6 +1520,18 @@
       let refreshQueue = Promise.resolve();
       let activeRefreshItem = null;
       let savedSettings = "";
+      let settingsLoaded = false;
+      let settingsSaving = false;
+      let settingsRevision = 0;
+      let settingsRequest = 0;
+      let rowsRequest = 0;
+      let renderedPage = 0;
+      let renderedSearch = null;
+      let allowNavigation = false;
+      let navigationPending = false;
+      let leavingUnsavedSettings = false;
+      let pageHash = "";
+      let historyIndex = null;
       let scanPollError = "";
       let visible = false;
       let strings;
@@ -1508,8 +1582,130 @@
         ]);
       const updateSave = () => {
         $("#themeSettings button[type=submit]").disabled =
-          settingsValue() === savedSettings;
+          !settingsLoaded || settingsSaving || !hasUnsavedSettings();
       };
+      const hasUnsavedSettings = () =>
+        settingsLoaded && settingsValue() !== savedSettings;
+      const focusRow = (id) => {
+        if (!visible || !page.isConnected || $("#themeOverview").hidden) return;
+        const row = [...$("#themeRows").children].find(
+          (row) => row.dataset.itemId === id,
+        );
+        const target = id
+          ? row?.querySelector("summary")
+          : $("#themeBulkMenu summary");
+        (target?.closest("[hidden]")
+          ? $("#themeSearch")
+          : target || $("#themeSearch")
+        ).focus({ preventScroll: true });
+      };
+      const confirmLeaving = async () => {
+        if (navigationPending) return false;
+        navigationPending = true;
+        try {
+          return await new Promise((resolve) =>
+            Dashboard.confirm(
+              {
+                title: t("unsavedSettingsTitle"),
+                text: t("unsavedSettingsWarning"),
+                confirmText: t("leavePage"),
+                cancelText: t("stayOnPage"),
+                dialogOptions: { id: "themeSongsConfirm" },
+              },
+              "",
+              resolve,
+            ),
+          );
+        } catch (error) {
+          showError(error);
+          return false;
+        } finally {
+          navigationPending = false;
+          if (page.isConnected && !page.closest(".hide")) visible = true;
+        }
+      };
+      const beforeUnload = (event) => {
+        if (
+          !visible ||
+          !page.isConnected ||
+          allowNavigation ||
+          !hasUnsavedSettings()
+        )
+          return;
+        event.preventDefault();
+        event.returnValue = "";
+      };
+      const beforeLinkNavigation = async (event) => {
+        if (
+          !visible ||
+          !page.isConnected ||
+          allowNavigation ||
+          !hasUnsavedSettings() ||
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        const link = event.target.closest?.("a[href]");
+        if (!link || link.target === "_blank" || link.hasAttribute("download"))
+          return;
+        const url = new URL(link.href);
+        if (
+          url.origin !== location.origin ||
+          !url.hash.startsWith("#/") ||
+          url.hash === pageHash
+        )
+          return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (await confirmLeaving()) {
+          allowNavigation = true;
+          await Emby.Page.show(url.hash);
+        }
+      };
+      const beforeHistoryNavigation = (event) => {
+        if (!page.isConnected || (!visible && !leavingUnsavedSettings)) return;
+        const nextIndex = event.state?.idx;
+        if (
+          location.hash === pageHash ||
+          allowNavigation ||
+          !hasUnsavedSettings()
+        ) {
+          historyIndex = nextIndex;
+          return;
+        }
+        const delta = nextIndex - historyIndex;
+        if (
+          !Number.isInteger(nextIndex) ||
+          !Number.isInteger(historyIndex) ||
+          !delta
+        )
+          return;
+        event.stopImmediatePropagation();
+        // Restore this entry before asking, so Stay keeps the router and URL aligned.
+        window.addEventListener(
+          "popstate",
+          async () => {
+            if (await confirmLeaving()) {
+              allowNavigation = true;
+              window.history.go(delta);
+            }
+          },
+          { capture: true, once: true },
+        );
+        window.history.go(-delta);
+      };
+      window.addEventListener("beforeunload", beforeUnload);
+      window.addEventListener("popstate", beforeHistoryNavigation, true);
+      document.addEventListener("click", beforeLinkNavigation, true);
+      page.addEventListener("viewdestroy", () => {
+        window.removeEventListener("beforeunload", beforeUnload);
+        window.removeEventListener("popstate", beforeHistoryNavigation, true);
+        document.removeEventListener("click", beforeLinkNavigation, true);
+      });
       const updateRowActions = () => {
         const removeAll = $("#themeDeleteAll");
         removeAll.hidden = allTotal === 0;
@@ -1542,7 +1738,7 @@
           else button.title = button.dataset.themeAction;
         }
       };
-      const confirmDelete = async (message, title) => {
+      const confirmDelete = async (message, title, itemId = null) => {
         if (confirming) return false;
         confirming = true;
         try {
@@ -1561,6 +1757,7 @@
           );
         } finally {
           confirming = false;
+          focusRow(itemId);
         }
       };
       const editSource = async (item) => {
@@ -1651,6 +1848,7 @@
         } finally {
           dialog?.remove();
           confirming = false;
+          focusRow(item.ItemId);
         }
       };
       const playTheme = async (item) => {
@@ -1709,6 +1907,14 @@
           closeButton.onclick = close;
           audio = dialog.querySelector("audio");
           audio.setAttribute("aria-label", t("playThemeFor", item.Name));
+          const volume = Number(sessionValue("volume") ?? 1);
+          audio.volume =
+            Number.isFinite(volume) && volume >= 0 && volume <= 1 ? volume : 1;
+          audio.muted = sessionValue("muted") === "true";
+          audio.addEventListener("volumechange", () => {
+            sessionValue("volume", String(audio.volume));
+            sessionValue("muted", String(audio.muted));
+          });
           const loading = (busy) => {
             if (controller.signal.aborted) return;
             area.setAttribute("aria-busy", String(busy));
@@ -1763,6 +1969,7 @@
           page.removeEventListener("pagehide", close);
           dialog?.remove();
           confirming = false;
+          focusRow(item.ItemId);
         }
       };
       const request = async (path, options = {}) => {
@@ -1844,7 +2051,10 @@
           } else showError(e);
         });
       async function settings() {
+        const requestId = ++settingsRequest;
+        const revision = settingsRevision;
         const data = await request("settings");
+        if (requestId !== settingsRequest || !visible) return;
         const form = $("#themeSettings");
         if (!data.DownloaderAvailable) toast(t("downloaderMissing"));
         downloaderFailed = Boolean(data.DownloaderError || data.RuntimeError);
@@ -1857,6 +2067,14 @@
         $("#themeRuntimeFailure").hidden = !data.RuntimeError;
         $("#themeRuntimeDetails").textContent = data.RuntimeError || "";
         updateRowActions();
+        if (
+          settingsLoaded &&
+          (hasUnsavedSettings() ||
+            settingsSaving ||
+            revision !== settingsRevision ||
+            form.contains(document.activeElement))
+        )
+          return;
         form.elements.enabled.checked = data.Enabled;
         form.elements.scanOnLibraryRefresh.checked = data.ScanOnLibraryRefresh;
         form.elements.preferFranchiseThemes.checked =
@@ -1883,29 +2101,56 @@
           }),
         );
         savedSettings = settingsValue();
+        settingsLoaded = true;
         form.inert = false;
         form.setAttribute("aria-busy", "false");
         $("#themeSettingsLoading").hidden = true;
         updateSave();
       }
       async function rows() {
+        const requestId = ++rowsRequest;
+        const requestedPage = current;
+        const search = $("#themeSearch").value;
         const data = await request(
           "downloads?page=" +
-            current +
+            requestedPage +
             "&search=" +
-            encodeURIComponent($("#themeSearch").value),
+            encodeURIComponent(search),
         );
+        if (
+          requestId !== rowsRequest ||
+          !visible ||
+          requestedPage !== current ||
+          search !== $("#themeSearch").value
+        )
+          return;
         total = data.Total;
         allTotal = data.AllTotal;
         $("#themeDownloads").setAttribute("aria-busy", "false");
         $("#themeDownloadsLoading").hidden = true;
         $("#themeDownloadCount").textContent = allTotal.toLocaleString();
+        $("#themeSearchResults").hidden = !search;
+        $("#themeSearchResults").textContent = t(
+          total === 1 ? "matchingTheme" : "matchingThemes",
+          total.toLocaleString(),
+        );
         if (current > 1 && (current - 1) * 25 >= total) {
           current--;
           return rows();
         }
         const container = $("#themeRows");
-        container.replaceChildren();
+        const focusedItem =
+          document.activeElement?.closest("#themeRows tr")?.dataset.itemId;
+        const scrollPositions = [];
+        if (requestedPage === renderedPage && search === renderedSearch) {
+          for (let element = page; element; element = element.parentElement)
+            scrollPositions.push([
+              element,
+              element.scrollLeft,
+              element.scrollTop,
+            ]);
+        }
+        const fragment = document.createDocumentFragment();
         $("#themeEmpty").hidden = total !== 0;
         $("#themeEmpty").textContent = t(
           $("#themeSearch").value ? "noResults" : "noDownloads",
@@ -2094,7 +2339,13 @@
           remove.dataset.destructive = "true";
           remove.onclick = async () => {
             if (scanRunning || bulkBusy || row.dataset.busy === "true") return;
-            if (!(await confirmDelete(t("confirmDelete"), t("deleteTheme"))))
+            if (
+              !(await confirmDelete(
+                t("confirmDelete"),
+                t("deleteTheme"),
+                item.ItemId,
+              ))
+            )
               return;
             if (!visible || scanRunning || bulkBusy || !row.isConnected) return;
             setBusy(t("deleting"));
@@ -2134,9 +2385,17 @@
           rowActions.append(menu);
           actions.append(rowActions);
           row.append(theme, added, actions);
-          container.append(row);
+          fragment.append(row);
         }
+        container.replaceChildren(fragment);
+        renderedPage = requestedPage;
+        renderedSearch = search;
         updateRowActions();
+        for (const [element, left, top] of scrollPositions) {
+          element.scrollLeft = left;
+          element.scrollTop = top;
+        }
+        if (focusedItem && !confirming) focusRow(focusedItem);
       }
       async function progress() {
         const data = await request("scan");
@@ -2338,6 +2597,9 @@
           });
       page.addEventListener("pageshow", () => {
         visible = true;
+        allowNavigation = false;
+        pageHash = location.hash;
+        historyIndex = window.history.state?.idx;
         load(
           async () => {
             await loadStrings();
@@ -2352,7 +2614,14 @@
         }, 3000);
       });
       page.addEventListener("pagehide", () => {
+        // Jellyfin can hide the legacy view before its popstate listener runs.
+        leavingUnsavedSettings = hasUnsavedSettings() && !allowNavigation;
+        setTimeout(() => {
+          leavingUnsavedSettings = false;
+        }, 0);
         visible = false;
+        allowNavigation = false;
+        rowsRequest++;
         clearInterval(page.timer);
       });
       $("#themeSettings").addEventListener("change", updateSave);
@@ -2363,7 +2632,7 @@
       $("#themeSettings").onsubmit = async (event) => {
         event.preventDefault();
         const form = event.currentTarget;
-        if (settingsValue() === savedSettings) return;
+        if (!hasUnsavedSettings() || settingsSaving) return;
         const enabled = form.elements.enabled.checked;
         const scanOnLibraryRefresh = form.elements.scanOnLibraryRefresh.checked;
         const preferFranchiseThemes =
@@ -2379,7 +2648,9 @@
           ...form.querySelectorAll("input[name=library]:checked"),
         ].map((x) => x.value);
         const submitted = settingsValue();
-        $("#themeSettings button[type=submit]").disabled = true;
+        settingsSaving = true;
+        settingsRevision++;
+        updateSave();
         try {
           await request("settings", {
             method: "POST",
@@ -2399,6 +2670,7 @@
         } catch (e) {
           showError(e);
         } finally {
+          settingsSaving = false;
           updateSave();
         }
       };
@@ -2460,8 +2732,14 @@
         }
       };
       $("#themeSearch").oninput = () => {
+        $("#themeSearchClear").hidden = !$("#themeSearch").value;
         current = 1;
         load(rows);
+      };
+      $("#themeSearchClear").onclick = () => {
+        $("#themeSearch").value = "";
+        $("#themeSearch").dispatchEvent(new Event("input", { bubbles: true }));
+        $("#themeSearch").focus({ preventScroll: true });
       };
       $("#themePrevious").onclick = () => {
         current = Math.max(1, current - 1);

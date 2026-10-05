@@ -153,11 +153,16 @@ try {
   const loaded = new Promise((resolve) => {
     releaseLoading = resolve;
   });
-  await page.route(/\/ThemeSongs\/settings$/, (route) =>
-    route.request().method() === "POST"
-      ? route.fulfill({ status: 204 })
-      : loaded.then(() => route.continue()),
-  );
+  let toolFailure = false;
+  await page.route(/\/ThemeSongs\/settings$/, async (route) => {
+    if (route.request().method() === "POST")
+      return route.fulfill({ status: 204 });
+    await loaded;
+    const response = await route.fetch();
+    const data = await response.json();
+    if (toolFailure) data.RuntimeError = "Test runtime failure";
+    return route.fulfill({ response, json: data });
+  });
   let scanStatus = {
     Running: false,
     Processed: 0,
@@ -168,10 +173,35 @@ try {
   await page.route(/\/ThemeSongs\/scan$/, (route) =>
     route.fulfill({ json: scanStatus }),
   );
+  let expandedDownloads = false;
+  let holdSearch = false;
+  let releaseSearch;
+  const searchReady = new Promise((resolve) => {
+    releaseSearch = resolve;
+  });
+  const moreItems = Array.from({ length: 50 }, (_, index) => ({
+    ...items[0],
+    ItemId: (index + 100).toString(16).padStart(32, "0"),
+    Name: "Fixture " + index,
+  }));
   await page.route(/\/ThemeSongs\/downloads(?:\?|$)/, async (route) => {
     await loaded;
+    const url = new URL(route.request().url());
+    const search = url.searchParams.get("search").toLowerCase();
+    if (holdSearch && search === "dialog") await searchReady;
+    const all = expandedDownloads ? [...items, ...moreItems] : items;
+    const results = all.filter(
+      (item) =>
+        item.Name.toLowerCase().includes(search) ||
+        item.Library.toLowerCase().includes(search),
+    );
+    const offset = (Number(url.searchParams.get("page")) - 1) * 25;
     await route.fulfill({
-      json: { Total: items.length, AllTotal: items.length, Items: items },
+      json: {
+        Total: results.length,
+        AllTotal: all.length,
+        Items: results.slice(offset, offset + 25),
+      },
     });
   });
   let audioAvailable = true;
@@ -219,6 +249,9 @@ try {
     edits.push(route.request().postDataJSON());
     await route.fulfill({ json: { Result: "Replaced" } });
   });
+  await page.route(/\/ThemeSongs\/[^/]+\/refresh$/, (route) =>
+    route.fulfill({ json: { Result: "Replaced" } }),
+  );
   await page.goto(base + "/web/#/configurationpage?name=JellyScore");
   await page.locator("#themeDownloadsLoading").waitFor({ state: "visible" });
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
@@ -231,6 +264,21 @@ try {
   releaseLoading();
   await page.waitForFunction(
     () => document.querySelector("#themeStrength").value !== "",
+  );
+  await page.locator('a[href="#/dashboard/settings"]').first().click();
+  await page.waitForURL(/dashboard\/settings/);
+  await page
+    .locator('a[href="#/configurationpage?name=JellyScore"]')
+    .first()
+    .click();
+  await page.waitForURL(/configurationpage/);
+  await page
+    .getByRole("tab", { name: "Settings", exact: true })
+    .waitFor({ state: "visible" });
+  assert.equal(
+    await page.locator("#themeSettingsTab").getAttribute("aria-selected"),
+    "true",
+    "returning to the plugin remembers its selected tab",
   );
   const checkbox = page.locator("input[name=enabled]");
   for (const checked of [false, true]) {
@@ -320,6 +368,41 @@ try {
     "invalid numbers use Jellyfin's error colour",
   );
   await page.locator("#themeStrength").fill("50");
+  await page.locator("#themeStrength").fill("73");
+  toolFailure = true;
+  scanStatus = { ...scanStatus, Failed: 1 };
+  await page.locator("#themeRuntimeFailure").waitFor({ state: "visible" });
+  assert.equal(
+    await page.locator("#themeStrength").inputValue(),
+    "73",
+    "background status updates preserve unsaved settings",
+  );
+  toolFailure = false;
+  scanStatus = { ...scanStatus, Failed: 2 };
+  await page.locator("#themeRuntimeFailure").waitFor({ state: "hidden" });
+  assert.equal(await page.locator("#themeStrength").inputValue(), "73");
+  const settingsUrl = page.url();
+  await page.locator('a[href="#/dashboard/settings"]').first().click();
+  const leaveDialog = page.locator("#themeSongsConfirm");
+  await leaveDialog.waitFor({ state: "visible" });
+  assert.equal(
+    page.url(),
+    settingsUrl,
+    "unsaved settings warn before in-app navigation",
+  );
+  await leaveDialog.getByRole("button", { name: "Stay", exact: true }).click();
+  await leaveDialog.waitFor({ state: "detached" });
+  assert.equal(await page.locator("#themeStrength").inputValue(), "73");
+  await page.goBack();
+  await leaveDialog.waitFor({ state: "visible" });
+  assert.equal(
+    page.url(),
+    settingsUrl,
+    "browser Back preserves the route until the administrator decides",
+  );
+  await leaveDialog.getByRole("button", { name: "Stay", exact: true }).click();
+  await leaveDialog.waitFor({ state: "detached" });
+  assert.equal(await page.locator("#themeStrength").inputValue(), "73");
   await page.locator("#themeOverviewTab").focus();
   await page.locator("#themeOverviewTab").press("ArrowRight");
   assert.equal(
@@ -330,6 +413,103 @@ try {
   assert.equal(
     await page.locator("#themeOverviewTab").getAttribute("aria-selected"),
     "true",
+  );
+  const search = page.locator("#themeSearch");
+  const clearSearch = page.getByRole("button", {
+    name: "Clear search",
+    exact: true,
+  });
+  await search.fill("missing title");
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeSearchResults").textContent ===
+      "0 matching themes",
+  );
+  await clearSearch.click();
+  await page.waitForFunction(
+    () => document.querySelectorAll("#themeRows tr").length === 2,
+  );
+  assert.equal(await search.inputValue(), "");
+  assert.equal(
+    await search.evaluate((element) => element === document.activeElement),
+    true,
+    "the search X returns focus to the field",
+  );
+  await clearSearch.waitFor({ state: "hidden" });
+  holdSearch = true;
+  const oldSearch = page.waitForResponse(
+    (response) =>
+      response.url().includes("/ThemeSongs/downloads") &&
+      new URL(response.url()).searchParams.get("search") === "Dialog",
+  );
+  await search.fill("Dialog");
+  await search.fill("Custom");
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeRows strong")?.textContent ===
+      "Custom source (2000)",
+  );
+  releaseSearch();
+  await (await oldSearch).finished();
+  assert.equal(
+    await page.locator("#themeRows strong").textContent(),
+    "Custom source (2000)",
+    "late search responses do not replace current results",
+  );
+  assert.equal(
+    await page.locator("#themeSearchResults").textContent(),
+    "1 matching theme",
+  );
+  await clearSearch.click();
+  await page.waitForFunction(
+    () => document.querySelectorAll("#themeRows tr").length === 2,
+  );
+  expandedDownloads = true;
+  await search.fill("Films");
+  await page.locator("#themePagination").waitFor({ state: "visible" });
+  await page.locator("#themeNext").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themePageInfo").textContent === "Page 2 of 3",
+  );
+  const refreshRow = page.locator("#themeRows tr").nth(10);
+  await refreshRow.locator("summary").click();
+  const positions = () =>
+    page.locator("#themeSongsPage").evaluate((element) => {
+      const result = [];
+      for (let node = element; node; node = node.parentElement)
+        result.push(node.scrollTop);
+      return result;
+    });
+  const scrollBefore = await positions();
+  const refreshName = await refreshRow.locator("strong").textContent();
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.url().includes("/ThemeSongs/downloads") &&
+      new URL(response.url()).searchParams.get("page") === "2",
+  );
+  await refreshRow.locator("button").nth(1).click();
+  await (await refreshed).finished();
+  await page.waitForFunction(
+    () => !document.querySelector("#themeRows [data-busy=true]"),
+  );
+  assert.equal(await search.inputValue(), "Films");
+  assert.equal(
+    await page.locator("#themePageInfo").textContent(),
+    "Page 2 of 3",
+  );
+  assert.deepEqual(
+    await positions(),
+    scrollBefore,
+    "refreshing preserves list scroll position",
+  );
+  assert.ok(
+    (await page.locator("#themeRows").textContent()).includes(refreshName),
+  );
+  expandedDownloads = false;
+  await clearSearch.click();
+  await page.waitForFunction(
+    () => document.querySelectorAll("#themeRows tr").length === 2,
   );
   scanStatus = {
     ...scanStatus,
@@ -475,6 +655,9 @@ try {
     () => !document.querySelector("#themeSongsPlayer audio").paused,
   );
   await player.getByRole("button", { name: "Pause", exact: true }).click();
+  await audio.evaluate((element) => {
+    element.volume = 0.4;
+  });
   assert.equal(
     await audio.evaluate((element) => element.paused),
     true,
@@ -508,6 +691,13 @@ try {
   );
   await player.getByRole("button", { name: "Close", exact: true }).click();
   await player.waitFor({ state: "detached" });
+  assert.equal(
+    await page
+      .locator('summary[aria-label="More actions for Dialog film"]')
+      .evaluate((element) => element === document.activeElement),
+    true,
+    "closing a preview restores row focus",
+  );
   assert.equal(
     await audio.evaluate(
       (element) => element.paused && !element.hasAttribute("src"),
@@ -590,6 +780,13 @@ try {
   });
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await dialog.waitFor({ state: "detached" });
+  assert.equal(
+    await page
+      .locator('summary[aria-label="More actions for Dialog film"]')
+      .evaluate((element) => element === document.activeElement),
+    true,
+    "closing the editor restores row focus",
+  );
   assert.equal(edits.length, 0, "cancel does not queue reprocessing");
 
   await openMenu("Dialog film");
@@ -737,6 +934,11 @@ try {
     () => document.querySelector("#themeSongsPlayer audio")?.readyState >= 2,
   );
   assert.equal(
+    await player.locator("audio").evaluate((element) => element.volume),
+    0.4,
+    "subsequent previews remember session volume",
+  );
+  assert.equal(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
@@ -745,6 +947,37 @@ try {
   );
   await player.getByRole("button", { name: "Close", exact: true }).click();
   await player.waitFor({ state: "detached" });
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const reloadDialog = page.waitForEvent("dialog");
+  const reloadAttempt = page.reload({ timeout: 5000 }).catch(() => {});
+  const unload = await reloadDialog;
+  assert.equal(
+    unload.type(),
+    "beforeunload",
+    "refreshing warns about unsaved settings",
+  );
+  await unload.dismiss();
+  await reloadAttempt;
+  assert.equal(
+    await page.locator("#themeStrength").inputValue(),
+    "73",
+    "cancelling refresh preserves edits",
+  );
+  await page.locator('a[href="#/dashboard/settings"]').first().click();
+  await leaveDialog.waitFor({ state: "visible" });
+  await leaveDialog.getByRole("button", { name: "Leave", exact: true }).click();
+  await page.waitForURL(/dashboard\/settings/);
+  await page
+    .locator('a[href="#/configurationpage?name=JellyScore"]')
+    .first()
+    .click();
+  await page.waitForURL(/configurationpage/);
+  assert.equal(
+    await page.locator("#themeSettingsTab").getAttribute("aria-selected"),
+    "true",
+    "confirmed navigation still remembers the selected tab",
+  );
   console.log(
     "Material controls, keyboard navigation, mobile layout, dialogs, and custom audio playback passed",
   );
