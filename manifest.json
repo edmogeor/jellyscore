@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Added\n\n- Preview managed themes in an audio dialog with locally bundled Video.js controls and translations matching the admin page's language. Remember preview volume and mute for the browser session.\n- Remember the selected admin tab, warn before leaving unsaved settings, and preserve settings edits during background reloads.\n\n### Improved\n\n- Refine the configuration page with Jellyfin-style Material fields, compact action dialogs, clearer row menus, red deletion actions, and responsive mobile layouts.\n- Keep theme ordering stable after replacements while updating the displayed date. Preserve search, pagination, scroll position, and row focus, and add filtered-result counts and a search clear button.\n- Group scan status in an inner panel and show audio loading and buffering inside the player's play control while keeping timeline and volume controls visible.\n- Lower the default theme loudness target from -26 to -30 LUFS for future downloads using the default setting.\n- Update all 16 supported translations and validate translation keys and placeholders during checks.\n- Simplify theme-processing and admin control flow, and expand browser coverage for dialogs, keyboard navigation, audio playback, and YouTube source validation.\n\n",
+        "checksum": "85d7a8817aa2d9755217e5ada39a2570",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.2.0.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-05T13:59:01Z",
+        "version": "0.2.0.0"
+      },
+      {
         "changelog": "### Added\n\n- Edit the YouTube source of a managed download and queue the selected video for reprocessing. Prefill existing YouTube sources and leave the field empty for themes from the configured TV URL source.\n- Translate the edit dialog, buttons, and validation messages into every supported language.\n\n### Improved\n\n- Use Jellyfin's native edit dialog with a red Cancel button on the left, Save on the right, and recovery from dialog setup errors.\n- Validate YouTube video URLs in both the page and management API. Keep the current theme intact until reprocessing succeeds and preserve all file-ownership checks.\n\n",
         "checksum": "8b49d3cd17b6a404bacfceacef13638b",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.30.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T09:19:24Z",
         "version": "0.1.2.0"
-      },
-      {
-        "changelog": "### Fixed\n\n- Preserve theme music dynamics by applying one fixed gain per track, capped by true peak, instead of dynamic loudness normalization.\n- Select the first eligible recording when top-scoring soundtrack tracks tie instead of leaving the item without a theme.\n\n",
-        "checksum": "c54fc8190ad3931cea2890b16dc7e24c",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.1.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T08:41:54Z",
-        "version": "0.1.1.0"
       }
     ]
   }
