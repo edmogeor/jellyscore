@@ -912,6 +912,15 @@
       align-items: center;
       gap: 0.25rem;
     }
+    #themeSongsPage .themeLibraryMetadata {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    #themeSongsPage .themeLibraryMetadata .material-icons {
+      font-size: 1.125rem;
+      flex-shrink: 0;
+    }
     #themeSongsPage .detailTable td:first-child {
       overflow-wrap: anywhere;
     }
@@ -2175,10 +2184,19 @@
             (item.Kind === "Collection" ? "" : " (" + (item.Year || "?") + ")");
           const status = document.createElement("div");
           const metadata = document.createElement("div");
-          metadata.className = "fieldDescription";
-          metadata.textContent = [item.Library, t("kind" + item.Kind)]
-            .filter(Boolean)
-            .join(" · ");
+          metadata.className = "fieldDescription themeLibraryMetadata";
+          const libraryIcon = icon(
+            {
+              Movie: "movie",
+              Series: "tv",
+              Collection: "collections_bookmark",
+            }[item.Kind] || "folder",
+          );
+          libraryIcon.title = t("kind" + item.Kind);
+          metadata.append(
+            libraryIcon,
+            document.createTextNode(item.Library || ""),
+          );
           status.className = "fieldDescription";
           status.hidden = item.Status === "Active";
           status.textContent = status.hidden ? "" : t("modified");
