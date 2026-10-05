@@ -556,7 +556,7 @@ try {
     await openMenu(name);
     await page
       .getByRole("button", {
-        name: "Edit YouTube source for " + name,
+        name: "Edit source for " + name,
         exact: true,
       })
       .click();
@@ -871,7 +871,7 @@ try {
   await openMenu("Dialog film");
   await page
     .getByRole("button", {
-      name: "Edit YouTube source for Dialog film",
+      name: "Edit source for Dialog film",
       exact: true,
     })
     .waitFor({ state: "visible" });
