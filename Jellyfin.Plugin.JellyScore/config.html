@@ -1888,21 +1888,18 @@
       });
       const updateRowActions = () => {
         const removeAll = $("#themeDeleteAll");
+        const add = $("#themeAdd");
+        const busyTitle = scanRunning ? t("availableAfterScan") : t("working");
         removeAll.hidden = managedTotal === 0;
-        $("#themeAdd").disabled = scanRunning || bulkBusy || downloaderFailed;
-        $("#themeAdd").title = scanRunning
-          ? t("availableAfterScan")
-          : bulkBusy
-            ? t("working")
-            : downloaderFailed
-              ? t(downloaderFailureCode)
-              : t("addTheme");
+        add.disabled = scanRunning || bulkBusy || downloaderFailed;
+        if (scanRunning || bulkBusy) add.title = busyTitle;
+        else if (downloaderFailed) add.title = t(downloaderFailureCode);
+        else add.title = t("addTheme");
         removeAll.disabled =
           scanRunning || bulkBusy || addsProcessing || managedTotal === 0;
-        removeAll.title = scanRunning
-          ? t("availableAfterScan")
-          : bulkBusy || addsProcessing
-            ? t("working")
+        removeAll.title =
+          scanRunning || bulkBusy || addsProcessing
+            ? busyTitle
             : t("deleteAll");
         removeAll.querySelector("[data-i18n]").textContent = t(
           bulkBusy ? "deleting" : "deleteAll",
@@ -2580,17 +2577,16 @@
         refreshingItems.add(item.ItemId);
         refreshErrors.delete(item.ItemId);
         updateRowActions();
+        let action = "refresh";
+        if (item.Pending) action = "add";
+        else if (youtubeUrl) action = "edit";
         try {
-          await request(
-            item.ItemId +
-              (item.Pending ? "/add" : youtubeUrl ? "/edit" : "/refresh"),
-            {
-              method: "POST",
-              ...(item.Pending || youtubeUrl
-                ? { body: JSON.stringify({ YouTubeUrl: youtubeUrl }) }
-                : {}),
-            },
-          );
+          await request(item.ItemId + "/" + action, {
+            method: "POST",
+            ...(item.Pending || youtubeUrl
+              ? { body: JSON.stringify({ YouTubeUrl: youtubeUrl }) }
+              : {}),
+          });
           toast(t("itemQueued", item.Name));
         } catch (error) {
           refreshErrors.set(item.ItemId, userError(error));
@@ -2691,17 +2687,15 @@
             (item.Status === "Active" && !item.Result) ||
             item.Pending ||
             item.Processing;
-          status.textContent = item.Result
-            ? t(
-                {
-                  Replaced: "replaced",
-                  "No replacement found": "noReplacement",
-                  "Already themed": "alreadyThemed",
-                }[item.Result] || "requestFailed",
-              )
-            : status.hidden
-              ? ""
-              : t("modified");
+          if (item.Result) {
+            const resultKey =
+              {
+                Replaced: "replaced",
+                "No replacement found": "noReplacement",
+                "Already themed": "alreadyThemed",
+              }[item.Result] || "requestFailed";
+            status.textContent = t(resultKey);
+          } else status.textContent = status.hidden ? "" : t("modified");
           const date = new Date(item.Date);
           const shortDate = date.toLocaleString(undefined, {
             month: "short",
@@ -2750,12 +2744,10 @@
           if (item.Processing) {
             row.dataset.busy = "true";
             busy.hidden = false;
-            busyText.textContent =
-              item.Stage === "queued"
-                ? t("queued")
-                : item.Stage === "stagePreparing" && !item.Pending
-                  ? t("refreshing")
-                  : t(item.Stage);
+            if (item.Stage === "queued") busyText.textContent = t("queued");
+            else if (item.Stage === "stagePreparing" && !item.Pending)
+              busyText.textContent = t("refreshing");
+            else busyText.textContent = t(item.Stage);
           }
           const setBusy = (text) => {
             renderedRowsKey = "";

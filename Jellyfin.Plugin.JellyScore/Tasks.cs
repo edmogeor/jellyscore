@@ -21,7 +21,7 @@ public sealed record ThemeProcessingJob(ManagedTheme Theme, string? YouTubeUrl, 
 
 public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProcessingWorker> logger) : BackgroundService
 {
-    private readonly Channel<Guid> _queue = Channel.CreateBounded<Guid>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { SingleReader = true });
+    private readonly Channel<ThemeProcessingJob> _queue = Channel.CreateBounded<ThemeProcessingJob>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { SingleReader = true });
     private readonly Dictionary<Guid, ThemeProcessingJob> _jobs = new();
     private readonly Lock _gate = new();
 
@@ -37,7 +37,7 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
         {
             var job = new ThemeProcessingJob(themes.PrepareRequest(id, replacement, youtubeUrl), youtubeUrl, replacement);
             _jobs[job.RequestId] = job;
-            if (!_queue.Writer.TryWrite(job.RequestId))
+            if (!_queue.Writer.TryWrite(job))
             {
                 _jobs.Remove(job.RequestId);
                 throw new InvalidOperationException("The processing queue is full. Please retry.");
@@ -74,10 +74,9 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        await foreach (var id in _queue.Reader.ReadAllAsync(ct))
+        await foreach (var job in _queue.Reader.ReadAllAsync(ct))
         {
-            ThemeProcessingJob job;
-            lock (_gate) job = _jobs[id];
+            var id = job.RequestId;
             try
             {
                 Update(id, "stagePreparing");
@@ -88,7 +87,7 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception e)
             {
-                Update(id, "Failed", false, ThemeController.ErrorCode(e, job.Replacement ? "refreshFailed" : "requestFailed"));
+                Update(id, "Failed", false, ThemeService.ErrorCode(e, job.Replacement ? "refreshFailed" : "requestFailed"));
                 logger.LogWarning(e, "Queued theme processing failed for {ItemId}", job.Theme.ItemId);
             }
         }

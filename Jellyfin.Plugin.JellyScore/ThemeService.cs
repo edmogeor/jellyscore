@@ -70,6 +70,22 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         return rows.Where(r => !removed.Contains(r.ItemId)).ToArray();
     }
     public string? Outcome(Guid id) => store.Read(s => s.Outcomes.GetValueOrDefault(id));
+
+    internal static string ErrorCode(Exception e, string fallback) => e.Message switch
+    {
+        "Theme changed elsewhere. The file was left untouched." or "Theme changed elsewhere. It was not deleted." or
+            "Theme changed during download. The file was left untouched." => "themeChanged",
+        "Another theme appeared. The file was left untouched." => "anotherTheme",
+        "No managed theme to refresh." or "No managed theme." or "Item no longer exists." => "themeUnavailable",
+        "Item is not in a selected library." or "Unsupported item." or "Movie needs a dedicated physical folder." or
+            "Item needs a physical folder inside its library." or "Item folder is missing or unwritable." or
+            "Collection has no matching movie or physical folder." => "themeLocationUnavailable",
+        "Item title is not ready; retry after metadata refresh." => "itemNotReady",
+        _ when e is SearchFailure => "searchFailed",
+        _ when e is DownloadFailure => "downloadFailed",
+        _ => fallback
+    };
+
     public ManagedTheme PrepareRequest(Guid id, bool replacement, string? youtubeUrl)
     {
         var item = library.GetItemById(id) ?? throw new InvalidOperationException("Item no longer exists.");

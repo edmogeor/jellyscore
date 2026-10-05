@@ -70,22 +70,33 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     {
         var managed = themes.List();
         var jobs = processing.List();
-        var all = managed.Select(r => (Theme: r, Job: jobs.FirstOrDefault(j => j.Theme.ItemId == r.ItemId)))
-            .Concat(jobs.Where(j => !j.Replacement && !managed.Any(r => r.ItemId == j.Theme.ItemId)).Select(j => (Theme: j.Theme, Job: (ThemeProcessingJob?)j)))
+        var managedIds = managed.Select(theme => theme.ItemId).ToHashSet();
+        var jobsByItem = jobs.ToDictionary(job => job.Theme.ItemId);
+        var all = managed.Select(theme => (Theme: theme, Job: jobsByItem.GetValueOrDefault(theme.ItemId)))
+            .Concat(jobs.Where(job => !job.Replacement && !managedIds.Contains(job.Theme.ItemId)).Select(job => (Theme: job.Theme, Job: (ThemeProcessingJob?)job)))
             .OrderByDescending(row => row.Theme.AddedAt ?? row.Theme.Date).ToArray();
         var rows = all.Where(row => string.IsNullOrEmpty(search) || row.Theme.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
             row.Theme.Library.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
         return new { Total = rows.Length, AllTotal = all.Length, ManagedTotal = managed.Count,
             Processing = jobs.Any(j => j.Processing), Items = rows.Skip((Math.Max(1, page) - 1) * JellyScoreConstants.AdminPageSize)
-            .Take(JellyScoreConstants.AdminPageSize).Select(row => { var r = row.Theme; return new {
-            r.ItemId, r.Name, r.Kind, r.Year, r.Library, r.Path, r.VideoTitle, r.Score, r.Evidence, r.Date,
-            Source = r.SourceUrl ?? (string.IsNullOrEmpty(r.VideoId) ? null : "https://www.youtube.com/watch?v=" + r.VideoId),
-            YouTubeUrl = !r.VideoId.StartsWith("tvdb:", StringComparison.Ordinal) && YouTube.VideoId(r.SourceUrl ?? "https://www.youtube.com/watch?v=" + r.VideoId) is { } videoId
-                ? "https://www.youtube.com/watch?v=" + videoId : null,
-            Pending = row.Job is { Replacement: false }, Processing = row.Job?.Processing ?? false,
-            Stage = row.Job is { Processing: true, Stage: not "queued" } ? YouTube.ToolSetupStage ?? row.Job.Stage : row.Job?.Stage,
-            Code = row.Job?.Code, Result = row.Job?.Result,
-            Status = row.Job is { Replacement: false } ? row.Job.Stage : ThemeService.Status(r) }; }) };
+            .Take(JellyScoreConstants.AdminPageSize).Select(row => DownloadRow(row.Theme, row.Job)) };
+    }
+
+    private static object DownloadRow(ManagedTheme theme, ThemeProcessingJob? job)
+    {
+        var source = theme.SourceUrl;
+        if (source is null && !string.IsNullOrEmpty(theme.VideoId)) source = "https://www.youtube.com/watch?v=" + theme.VideoId;
+        var videoId = theme.VideoId.StartsWith("tvdb:", StringComparison.Ordinal) ? null : YouTube.VideoId(source);
+        var stage = job?.Stage;
+        if (job is { Processing: true, Stage: not "queued" }) stage = YouTube.ToolSetupStage ?? job.Stage;
+        return new
+        {
+            theme.ItemId, theme.Name, theme.Kind, theme.Year, theme.Library, theme.Path, theme.VideoTitle, theme.Score, theme.Evidence, theme.Date,
+            Source = source, YouTubeUrl = videoId is null ? null : "https://www.youtube.com/watch?v=" + videoId,
+            Pending = job is { Replacement: false }, Processing = job?.Processing ?? false,
+            Stage = stage, Code = job?.Code, Result = job?.Result,
+            Status = job is { Replacement: false } ? job.Stage : ThemeService.Status(theme)
+        };
     }
 
     [HttpDelete("downloads")]
@@ -149,7 +160,7 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     {
         if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
         try { processing.Enqueue(id, youtubeUrl, replacement); return Accepted(); }
-        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "requestFailed") }); }
+        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ThemeService.ErrorCode(e, "requestFailed") }); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return UnprocessableEntity(new { Code = "themeLocationUnavailable" }); }
     }
 
@@ -158,22 +169,8 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     {
         if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
         try { await themes.Delete(id, ct); return NoContent(); }
-        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "deleteFailed") }); }
-        catch (IOException e) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "deleteFailed") }); }
+        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ThemeService.ErrorCode(e, "deleteFailed") }); }
+        catch (IOException e) { return UnprocessableEntity(new { Error = e.Message, Code = ThemeService.ErrorCode(e, "deleteFailed") }); }
     }
 
-    internal static string ErrorCode(Exception e, string fallback) => e.Message switch
-    {
-        "Theme changed elsewhere. The file was left untouched." or "Theme changed elsewhere. It was not deleted." or
-            "Theme changed during download. The file was left untouched." => "themeChanged",
-        "Another theme appeared. The file was left untouched." => "anotherTheme",
-        "No managed theme to refresh." or "No managed theme." or "Item no longer exists." => "themeUnavailable",
-        "Item is not in a selected library." or "Unsupported item." or "Movie needs a dedicated physical folder." or
-            "Item needs a physical folder inside its library." or "Item folder is missing or unwritable." or
-            "Collection has no matching movie or physical folder." => "themeLocationUnavailable",
-        "Item title is not ready; retry after metadata refresh." => "itemNotReady",
-        _ when e is SearchFailure => "searchFailed",
-        _ when e is DownloadFailure => "downloadFailed",
-        _ => fallback
-    };
 }
