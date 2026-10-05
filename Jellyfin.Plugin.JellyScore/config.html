@@ -323,11 +323,11 @@
       color: var(--jf-palette-primary-main);
       animation: themeSongsSpin 1.4s linear infinite;
     }
-    #themeSongsPlayer {
+    :is(#themeSongsEdit, #themeSongsPlayer) {
       width: min(32rem, calc(100vw - 2rem));
       max-height: calc(100dvh - 2rem);
     }
-    #themeSongsPlayer .dialogContentInner {
+    :is(#themeSongsEdit, #themeSongsPlayer) .dialogContentInner {
       box-sizing: border-box;
       width: 100%;
       max-width: none;
@@ -372,7 +372,7 @@
     #themeSongsPlayer [hidden] {
       display: none !important;
     }
-    #themeSongsPlayer .formDialogFooter {
+    :is(#themeSongsEdit, #themeSongsPlayer) .formDialogFooter {
       position: static;
       width: auto;
       margin: 1rem 0 0;
@@ -1574,7 +1574,7 @@
             removeOnClose: true,
             scrollY: false,
           });
-          dialog.classList.add("formDialog", "dialog-fullscreen-lowres");
+          dialog.classList.add("formDialog");
           dialog.setAttribute("role", "dialog");
           dialog.setAttribute("aria-modal", "true");
           dialog.setAttribute("aria-labelledby", "themeSongsEditTitle");
