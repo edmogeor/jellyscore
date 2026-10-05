@@ -1037,6 +1037,7 @@ try {
     "true",
     "confirmed navigation still remembers the selected tab",
   );
+  await page.unrouteAll({ behavior: "wait" });
   console.log(
     "Material controls, keyboard navigation, mobile layout, dialogs, and custom audio playback passed",
   );
