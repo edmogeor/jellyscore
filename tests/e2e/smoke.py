@@ -14,6 +14,35 @@ def field(data, name):
     return data.get(name, data.get(name[0].upper() + name[1:]))
 
 
+def add_until(token, item_id, youtube_url=None):
+    status, result = request("POST", f"/ThemeSongs/{item_id}/add", {"youTubeUrl": youtube_url}, token=token, timeout=10)
+    assert status == 202, f"queue theme add: {status} {result}"
+    for _ in range(180):
+        status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+        theme = next((item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(item_id)), None)
+        assert theme is not None, f"queued item missing from managed downloads: {downloads}"
+        if not field(theme, "pending"):
+            assert field(theme, "status") == "Active", f"queued theme not installed: {theme}"
+            return theme
+        assert field(theme, "processing"), f"queued theme add failed: {theme}"
+        time.sleep(2)
+    raise AssertionError(f"queued theme add did not finish: {theme}")
+
+
+def reprocess_until(token, item_id, youtube_url=None):
+    action = "edit" if youtube_url else "refresh"
+    status, result = request("POST", f"/ThemeSongs/{item_id}/{action}", {"youTubeUrl": youtube_url} if youtube_url else None, token=token, timeout=10)
+    assert status == 202, f"queue {action}: {status} {result}"
+    for _ in range(180):
+        _, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+        theme = next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(item_id))
+        if not field(theme, "processing"):
+            assert field(theme, "result") in ("Replaced", "No replacement found", "Already themed"), f"queued {action} failed: {theme}"
+            return {"Result": field(theme, "result")}
+        time.sleep(2)
+    raise AssertionError(f"queued {action} did not finish: {theme}")
+
+
 def assert_settings(token, enabled, libraries, minimum=50, loudness=-30, scan_on_library_refresh=True):
     for path in ("/ThemeSongs/settings", f"/Plugins/{PLUGIN}/Configuration"):
         status, settings = request("GET", path, token=token)
@@ -38,9 +67,19 @@ def scan_until(token, expected=None, expect_current=False):
     status, _ = request("POST", "/ThemeSongs/scan", token=token)
     assert status == 202, f"start rescan: {status}"
     saw_current = False
+    checked_scan_guards = False
     for attempt in range(300):
         status, progress = request("GET", "/ThemeSongs/scan", token=token)
         if status == 200 and field(progress, "running") and field(progress, "currentItem"):
+            if not checked_scan_guards and expect_current:
+                target = "/ThemeSongs/00000000-0000-0000-0000-000000000001"
+                for method, path, body in [("POST", target + "/add", {}), ("POST", target + "/refresh", None),
+                                           ("POST", target + "/edit", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}),
+                                           ("DELETE", target, None), ("DELETE", target + "/pending", None),
+                                           ("DELETE", "/ThemeSongs/downloads", None)]:
+                    action_status, error = request(method, path, body, token)
+                    assert action_status == 409 and field(error, "code") == "availableAfterScan", f"scan must block {method} {path}: {action_status} {error}"
+                checked_scan_guards = True
             active = field(progress, "activeItems")
             assert len(active) == 1 and all(field(item, "name") and field(item, "stage") in english_strings for item in active), (
                 f"scan omitted active item stages: {progress}"
@@ -130,6 +169,10 @@ english_strings = strings
 for url in ("https://example.com/theme.mp3", "https://youtube.com.evil.example/watch?v=aaaaaaaaaaa", "https://www.youtube.com/playlist?list=test", ""):
     status, error = request("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit", {"youTubeUrl": url}, token)
     assert status == 400 and field(error, "code") == "invalidYouTubeUrl", f"custom or invalid edit source rejected: {status} {error}"
+    status, error = request("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/add", {"youTubeUrl": url}, token)
+    assert status == 400 and field(error, "code") == "invalidYouTubeUrl", f"custom or invalid add source rejected: {status} {error}"
+status, error = request("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/add", {}, token)
+assert status == 409 and field(error, "code") == "themeUnavailable", f"add missing item: {status} {error}"
 status, strings = request("GET", "/ThemeSongs/strings/fr", token=token)
 assert status == 200 and strings["scanLibraries"] == "Analyser les bibliothèques", f"French translations: {status} {strings}"
 assert strings["scanOnLibraryRefresh"], "French scan trigger translation missing"
@@ -227,8 +270,11 @@ for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/d
     status, _ = request(method, path)
     assert status in (401, 403), f"unauthorized {path}: {status}"
 print("Jellyfin 12 plugin smoke checks passed")
-if os.environ.get("LIVE_YOUTUBE") == "0":
-    raise SystemExit(0)
+for method, path in [("GET", "/ThemeSongs/items?search=Dune"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/add")]:
+    status, _ = request(method, path)
+    assert status in (401, 403), f"unauthorized {path}: {status}"
+status, _ = request("DELETE", "/ThemeSongs/00000000-0000-0000-0000-000000000001/pending")
+assert status in (401, 403), f"unauthorized failed-add dismissal: {status}"
 print("Creating movie and TV libraries...", flush=True)
 libraries(token)
 print("Waiting for movie and series indexing...", flush=True)
@@ -275,6 +321,27 @@ else:
     raise AssertionError("Jellyfin library indexing did not finish")
 status, folders = request("GET", "/Library/VirtualFolders", token=token)
 films = next(folder for folder in folders if folder["Name"] == "Films")
+status, results = request("GET", "/ThemeSongs/items?search=Dune", token=token)
+assert status == 200 and any(field(item, "name") == "Dune" for item in results), f"search library content without themes: {status} {results}"
+for search in ("User%20Theme", ""):
+    status, results = request("GET", "/ThemeSongs/items?search=" + search, token=token)
+    assert status == 200 and results == [], f"exclude existing themes and empty searches: {status} {results}"
+status, results = request("GET", "/ThemeSongs/items?search=Unselected%20Example", token=token)
+assert status == 200 and any(field(item, "name") == "Unselected Example" for item in results), f"search must include unselected libraries: {status} {results}"
+status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": []}, token)
+status, results = request("GET", "/ThemeSongs/items?search=Dune", token=token)
+assert status == 200 and any(field(item, "name") == "Dune" for item in results), f"manual search works with no automatic libraries: {status} {results}"
+request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": library_ids}, token)
+user_theme = next(item for item in items["Items"] if item["Name"] == "User Theme")
+status, result = request("POST", f"/ThemeSongs/{user_theme['Id']}/add", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}, token)
+assert status == 409 and field(result, "code") == "anotherTheme", f"add must protect existing user theme: {status} {result}"
+status, _ = request("DELETE", f"/ThemeSongs/{user_theme['Id']}/pending", token=token)
+assert status == 409, f"dismissal cannot remove a user theme: {status}"
+subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "cmp", "-s",
+                "/tmp/user-theme-original", "/media/movies/User Theme (2000)/theme.mp3"], check=True)
+print("Add-theme search, source validation, authorization, and existing-file protection passed")
+if os.environ.get("LIVE_YOUTUBE") == "0":
+    raise SystemExit(0)
 options = films["LibraryOptions"]
 options["TypeOptions"] = [{"Type": "Movie", "MetadataFetchers": ["TheMovieDb"]}]
 status, _ = request("POST", "/Library/VirtualFolders/LibraryOptions", {"Id": films["ItemId"], "LibraryOptions": options}, token)
@@ -288,6 +355,21 @@ if source_template:
     assert status == 204, f"enable test TV theme source: {status}"
 movie = next(item for item in items["Items"] if "Sorcerer" in item["Name"])
 user_theme = next(item for item in items["Items"] if item["Name"] == "User Theme")
+dune_item = next(item for item in items["Items"] if item["Name"] == "Dune")
+with open("dist/universal/yt-dlp-version", encoding="utf-8") as release:
+    binary = f"/config/plugins/configurations/jellyscore-yt-dlp/{release.read().strip()}/yt-dlp_linux"
+with open("dist/universal/deno-version", encoding="utf-8") as release:
+    runtime = f"/config/plugins/configurations/jellyscore-yt-dlp/{release.read().strip()}/deno"
+for path in (binary, runtime):
+    subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "test", "!", "-e", path], check=True)
+_, before_manual = request("GET", "/ThemeSongs/scan", token=token)
+assert field(before_manual, "total") == 0, "no media scan has prepared the download tools"
+add_until(token, dune_item["Id"])
+for path in (binary, runtime):
+    subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "test", "-x", path], check=True)
+_, after_manual = request("GET", "/ThemeSongs/scan", token=token)
+assert field(after_manual, "runId") == field(before_manual, "runId"), "first manual add installed tools without starting a scan"
+print("First manual add installed yt-dlp and Deno without a media scan")
 first_scan = scan_until(token, "added", expect_current=True)
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 assert status == 200, f"list themes: {status}"
@@ -317,10 +399,15 @@ if source_template:
 assert field(theme, "source").startswith("https://www.youtube.com/watch?v="), theme
 assert field(theme, "youTubeUrl") == field(theme, "source"), f"YouTube edit field must prefill the existing source: {theme}"
 original_source = field(theme, "source")
+unselected_item = next(item for item in items["Items"] if item["Name"] == "Unselected Example")
+unselected_theme = add_until(token, unselected_item["Id"], original_source)
+assert field(unselected_theme, "source") == original_source, "manual add uses the chosen URL in an unselected library"
+status, result = request("GET", "/ThemeSongs/downloads", token=token)
+assert any(uuid.UUID(field(item, "itemId")) == uuid.UUID(unselected_item["Id"]) for item in field(result, "items")), "unselected-library themes remain managed after reconciliation"
+status, _ = request("DELETE", f"/ThemeSongs/{unselected_item['Id']}", token=token)
+assert status == 204, f"delete managed theme in unselected library: {status}"
 assert field(theme, "score") > 0, theme
 assert field(theme, "status") == "Active", theme
-with open("dist/universal/yt-dlp-version", encoding="utf-8") as release:
-    binary = f"/config/plugins/configurations/jellyscore-yt-dlp/{release.read().strip()}/yt-dlp_linux"
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "test", "-x", binary], check=True)
 status, _ = request("POST", "/ThemeSongs/downloader/retry", token=token)
 assert status == 204, f"retry endpoint should reuse the verified download: {status}"
@@ -331,8 +418,7 @@ status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 assert status == 200, f"list before refresh: {status}"
 original_order = [field(item, "itemId") for item in field(downloads, "items")]
 original_date = field(next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"])), "date")
-status, refreshed = request("POST", f"/ThemeSongs/{movie['Id']}/refresh", token=token, timeout=300)
-assert status == 200 and field(refreshed, "result") in ("Replaced", "No replacement found"), f"refresh theme: {status} {refreshed}"
+refreshed = reprocess_until(token, movie["Id"])
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 theme = next((item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"])), None)
 assert status == 200 and theme is not None, f"refresh lost managed theme: {downloads}"
@@ -341,8 +427,8 @@ assert [field(item, "itemId") for item in field(downloads, "items")] == original
 if field(refreshed, "result") == "Replaced":
     assert datetime.fromisoformat(field(theme, "date")) > datetime.fromisoformat(original_date), "replacement did not update its displayed date"
 refreshed_date = field(theme, "date")
-status, edited = request("POST", f"/ThemeSongs/{movie['Id']}/edit", {"youTubeUrl": original_source}, token=token, timeout=300)
-assert status == 200 and field(edited, "result") == "Replaced", f"reprocess explicitly selected, previously excluded source: {status} {edited}"
+edited = reprocess_until(token, movie["Id"], original_source)
+assert field(edited, "result") == "Replaced", f"reprocess explicitly selected, previously excluded source: {edited}"
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 theme = next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"]))
 assert field(theme, "source") == original_source and field(theme, "status") == "Active", f"edited source not installed: {theme}"
@@ -362,6 +448,9 @@ for _ in range(30):
 assert status == 200 and songs.get("TotalRecordCount") == 0, f"Jellyfin still sees deleted theme: {status} {songs}"
 status, _ = request("POST", f"/ThemeSongs/{movie['Id']}/refresh", token=token)
 assert status == 409, f"refresh deleted theme: {status}"
+add_until(token, movie["Id"], original_source)
+status, results = request("GET", "/ThemeSongs/items?search=Sorcerer", token=token)
+assert status == 200 and results == [], f"managed themes must be excluded from add search: {status} {results}"
 scan_until(token)
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 theme = next((item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"])), None)
@@ -410,3 +499,22 @@ subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "cmp", "-s",
                 "/tmp/edited-theme-original", field(dune, "path")], check=True)
 print("Movie and series scan, refresh, delete, bulk delete, and stale-record cleanup passed")
+status, _ = request("POST", f"/ThemeSongs/{unselected_item['Id']}/add", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}, token)
+assert status == 202, f"queue unavailable source: {status}"
+status, _ = request("DELETE", f"/ThemeSongs/{unselected_item['Id']}/pending", token=token)
+assert status == 409, f"active processing cannot be dismissed: {status}"
+for _ in range(180):
+    _, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+    failed = next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(unselected_item["Id"]))
+    if not field(failed, "processing"):
+        break
+    time.sleep(2)
+else:
+    raise AssertionError("unavailable source did not report failure")
+assert field(failed, "pending") and field(failed, "code"), f"failed add must be dismissible: {failed}"
+status, _ = request("DELETE", f"/ThemeSongs/{unselected_item['Id']}/pending", token=token)
+assert status == 204, f"dismiss failed add: {status}"
+_, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+assert field(downloads, "allTotal") == 0, f"dismissed failure remains in table: {downloads}"
+subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "test", "!", "-e", field(unselected_theme, "path")], check=True)
+print("Failed-add dismissal removes only the queue entry and refuses active work")

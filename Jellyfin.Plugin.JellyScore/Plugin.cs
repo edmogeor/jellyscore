@@ -60,6 +60,8 @@ public sealed class Registration : IPluginServiceRegistrator
         services.AddSingleton<YouTube>();
         services.AddSingleton<Store>();
         services.AddSingleton<ThemeService>();
+        services.AddSingleton<ThemeProcessingWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<ThemeProcessingWorker>());
         services.AddHostedService<NewItemWorker>();
         services.AddHostedService<LibraryScanWorker>();
         services.AddSingleton<ThemeScan>();

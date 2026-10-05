@@ -1,6 +1,7 @@
 // Run against `make up` with Playwright available through NODE_PATH.
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync, readdirSync } from "node:fs";
 
 const { chromium } = createRequire(import.meta.url)("playwright");
 const base = process.env.PREVIEW_URL || "http://127.0.0.1:18096";
@@ -128,6 +129,20 @@ try {
   const nativeButton = await buttonStyle(
     page.locator("button.MuiButton-root[type=submit]"),
   );
+  const disabledStyle = (locator) =>
+    locator.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return Object.fromEntries(
+        [
+          "color",
+          "backgroundColor",
+          "opacity",
+          "cursor",
+          "transform",
+          "boxShadow",
+        ].map((property) => [property, style[property]]),
+      );
+    });
   const checkboxStyle = (locator) =>
     locator.evaluate((element) => {
       const style = getComputedStyle(element);
@@ -247,10 +262,11 @@ try {
   });
   await page.route(/\/ThemeSongs\/[^/]+\/edit$/, async (route) => {
     edits.push(route.request().postDataJSON());
-    await route.fulfill({ json: { Result: "Replaced" } });
+    items[1].Result = "Replaced";
+    await route.fulfill({ status: 202 });
   });
   await page.route(/\/ThemeSongs\/[^/]+\/refresh$/, (route) =>
-    route.fulfill({ json: { Result: "Replaced" } }),
+    route.fulfill({ status: 202 }),
   );
   await page.goto(base + "/web/#/configurationpage?name=JellyScore");
   await page.locator("#themeDownloadsLoading").waitFor({ state: "visible" });
@@ -532,6 +548,52 @@ try {
     null,
     "the first active item is not counted as completed",
   );
+  assert.equal(
+    await page.locator("#themeAdd").isDisabled(),
+    true,
+    "the global add action is disabled during a scan",
+  );
+  assert.equal(
+    await page.locator("#themeDeleteAll").isDisabled(),
+    true,
+    "bulk deletion is disabled during a scan",
+  );
+  const scanActions = page.locator("#themeRows tr").first().locator("button");
+  assert.equal(
+    await scanActions.nth(0).isEnabled(),
+    true,
+    "theme playback remains available during a scan",
+  );
+  for (const index of [1, 2, 3])
+    assert.equal(
+      await scanActions.nth(index).isDisabled(),
+      true,
+      "refresh, source editing, and deletion are disabled during a scan",
+    );
+  assert.equal(await page.locator("#themeSearch").isEnabled(), true);
+  assert.equal(await page.locator("#themeScanCancel").isEnabled(), true);
+  await page.waitForTimeout(300);
+  const disabledActionStyle = await disabledStyle(page.locator("#themeAdd"));
+  assert.deepEqual(
+    await disabledStyle(page.locator("#themeDeleteAll")),
+    disabledActionStyle,
+    "global disabled actions share one style",
+  );
+  for (const index of [1, 2, 3])
+    assert.deepEqual(
+      await disabledStyle(scanActions.nth(index)),
+      disabledActionStyle,
+      "item disabled actions use the same style, including delete",
+    );
+  await page.locator("#themeRows tr").first().locator("summary").click();
+  await scanActions.nth(1).hover();
+  assert.deepEqual(
+    await disabledStyle(scanActions.nth(1)),
+    disabledActionStyle,
+    "disabled actions do not change on hover",
+  );
+  await page.mouse.move(0, 0);
+  await page.keyboard.press("Escape");
   scanStatus = {
     ...scanStatus,
     Processed: 1,
@@ -549,6 +611,10 @@ try {
   );
   scanStatus = { ...scanStatus, Running: false, ActiveItems: [] };
   await page.locator("#themeScanStart").waitFor({ state: "visible" });
+  await page.waitForFunction(
+    () =>
+      !document.querySelector("#themeRows button[data-destructive]").disabled,
+  );
   const dialog = page.locator("#themeSongsEdit");
   const openMenu = async (name) =>
     page.locator('summary[aria-label="More actions for ' + name + '"]').click();
@@ -620,6 +686,7 @@ try {
         ].map((key) => [key, style[key]]),
       );
     });
+  await page.waitForTimeout(250);
   const deleteStyle = await menuItemStyle(
     page.locator("#themeRows tr:first-child button[data-destructive]"),
   );
@@ -858,9 +925,11 @@ try {
     { YouTubeUrl: "https://www.youtube.com/watch?v=bbbbbbbbbbb" },
   ]);
   assert.equal(
-    await page.evaluate(() => window.jellyScoreToasts.includes("Replaced")),
+    await page.evaluate(() =>
+      window.jellyScoreToasts.includes("Custom source added to queue."),
+    ),
     true,
-    "replacement feedback retains its toast",
+    "reprocessing confirms queueing instead of waiting for completion",
   );
 
   for (const url of [
@@ -1037,6 +1106,488 @@ try {
     "true",
     "confirmed navigation still remembers the selected tab",
   );
+  // The global add action remains available when there are no managed downloads.
+  const queuedAdds = [];
+  await page.route(/\/ThemeSongs\/downloads(?:\?|$)/, (route) =>
+    route.fulfill({
+      json: {
+        Total: queuedAdds.length,
+        AllTotal: queuedAdds.length,
+        ManagedTotal: 0,
+        Processing: queuedAdds.some((item) => item.Processing),
+        Items: queuedAdds,
+      },
+    }),
+  );
+  const available = ["Movie", "Series", "Collection"].map((Kind, index) => ({
+    ItemId: (index + 300).toString(16).padStart(32, "0"),
+    Name: "Unthemed " + Kind,
+    Kind,
+    Library: ["Films", "Shows", "Collections"][index],
+    Year: 2000,
+  }));
+  await page.route(/\/ThemeSongs\/items\?/, (route) => {
+    const term = new URL(route.request().url()).searchParams.get("search");
+    return route.fulfill({ json: term === "Unthemed" ? available : [] });
+  });
+  const additions = [];
+  const dismissedAdds = [];
+  await page.route(/\/ThemeSongs\/[^/]+\/pending$/, (route) => {
+    assert.equal(route.request().method(), "DELETE");
+    const id = route.request().url().split("/").at(-2);
+    const index = queuedAdds.findIndex((item) => item.ItemId === id);
+    assert.ok(index >= 0 && !queuedAdds[index].Processing);
+    dismissedAdds.push(id);
+    queuedAdds.splice(index, 1);
+    return route.fulfill({ status: 204 });
+  });
+  await page.route(/\/ThemeSongs\/[^/]+\/add$/, (route) => {
+    additions.push({
+      url: route.request().url(),
+      body: route.request().postDataJSON(),
+    });
+    if (additions.at(-1).body.YouTubeUrl === "https://example.com/audio")
+      return route.fulfill({
+        status: 400,
+        json: { Code: "invalidYouTubeUrl" },
+      });
+    const id = route.request().url().split("/").at(-2);
+    queuedAdds.push({
+      ...available.find((item) => item.ItemId === id),
+      Library: "Films",
+      Date: new Date().toISOString(),
+      Pending: true,
+      Processing: true,
+      Stage: "queued",
+      Status: "queued",
+      Code: null,
+    });
+    return route.fulfill({ status: 202 });
+  });
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await page.locator("#themeSearch").fill("empty downloads");
+  await page.locator("#themeEmpty").waitFor({ state: "visible" });
+  const searchStates = await captureStates(
+    page.locator("#themeSearch"),
+    "Unthemed",
+  );
+  const openAdd = async () => {
+    if (!(await page.locator("#themeBulkMenu").evaluate((menu) => menu.open)))
+      await page.locator("#themeBulkMenu summary").click();
+    await page.getByRole("button", { name: "Add theme", exact: true }).click();
+    await page.locator("#themeSongsAdd").waitFor({ state: "visible" });
+  };
+  for (const closeWith of ["Escape", "Cancel"]) {
+    await openAdd();
+    const dialog = page.locator("#themeSongsAdd");
+    await dialog.getByLabel("Search your library").focus();
+    for (let tab = 0; tab < 12; tab++) {
+      await page.keyboard.press("Tab");
+      assert.equal(
+        await dialog.evaluate((element) =>
+          element.contains(document.activeElement),
+        ),
+        true,
+        "Tab stays inside the modal",
+      );
+    }
+    if (closeWith === "Escape") await page.keyboard.press("Escape");
+    else {
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).focus();
+      await page.keyboard.press("Enter");
+    }
+    await dialog.waitFor({ state: "detached" });
+    await page.waitForFunction(() => document.activeElement.id === "themeAdd");
+  }
+  for (const [index, result] of available.entries()) {
+    if (index === 2) await page.setViewportSize({ width: 390, height: 844 });
+    await openAdd();
+    const addDialog = page.locator("#themeSongsAdd");
+    await addDialog.waitFor({ state: "visible" });
+    assert.equal(await addDialog.locator(".button-submit").isDisabled(), true);
+    const searchInput = addDialog.getByLabel("Search your library");
+    if (index === 0) {
+      // Let the dialog's delayed initial focus settle before measuring field states.
+      await page.waitForTimeout(400);
+      assert.deepEqual(
+        await captureStates(searchInput, "Unthemed"),
+        searchStates,
+        "add search uses the shared Material field styling",
+      );
+    } else await searchInput.fill("Unthemed");
+    assert.equal(
+      await addDialog
+        .getByRole("button", { name: "Search", exact: true })
+        .count(),
+      0,
+      "search is live without a submit button",
+    );
+    if (index === 0) {
+      await searchInput.fill("No match");
+      await page.waitForFunction(() =>
+        document
+          .querySelector(".themeAddSearchStatus")
+          .textContent.startsWith("No results found"),
+      );
+      assert.equal(
+        await addDialog
+          .locator(".themeAddItems .themeAddSearchStatus")
+          .isVisible(),
+        true,
+        "no-results feedback stays in the results area",
+      );
+      const clear = addDialog.getByRole("button", {
+        name: "Clear search",
+        exact: true,
+      });
+      assert.deepEqual(
+        await buttonStyle(clear),
+        await buttonStyle(page.locator("#themeSearchClear")),
+        "clear controls share styling",
+      );
+      await clear.click();
+      assert.equal(await searchInput.inputValue(), "");
+      assert.equal(
+        await addDialog.locator(".themeAddResults input").count(),
+        0,
+      );
+      await searchInput.fill("Unthemed");
+    }
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll(".themeAddResults input[type=radio]")
+          .length === 3,
+    );
+    const announcement = addDialog.locator(".themeAddAnnouncements");
+    assert.equal(await announcement.getAttribute("aria-live"), "polite");
+    assert.equal(await announcement.getAttribute("aria-atomic"), "true");
+    assert.ok(
+      (await announcement.ariaSnapshot()).includes("3 results found."),
+      "result counts appear in the accessibility tree",
+    );
+    assert.equal(
+      await addDialog.locator("select").count(),
+      0,
+      "results and source options do not use dropdowns",
+    );
+    const card = addDialog.getByRole("radio", {
+      name: new RegExp(result.Name),
+    });
+    assert.equal(
+      await card
+        .locator("..")
+        .locator(".themeChoiceDetails > span:not(.material-icons)")
+        .textContent(),
+      `${result.Library} · 2000`,
+    );
+    assert.equal(
+      await card
+        .locator("..")
+        .locator(".themeChoiceDetails .material-icons")
+        .textContent(),
+      { Movie: "movie", Series: "tv", Collection: "collections_bookmark" }[
+        result.Kind
+      ],
+      "search results use the table's item icon",
+    );
+    assert.equal(
+      await card
+        .locator("..")
+        .locator(".themeChoiceDetails")
+        .evaluate((element) => getComputedStyle(element).opacity),
+      "1",
+      "result metadata is not dimmed",
+    );
+    await addDialog.locator(".themeAddResults input").first().focus();
+    await page.keyboard.press("Space");
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await addDialog.locator(".themeAddResults input").nth(1).isChecked(),
+      true,
+      "arrow keys select the next result",
+    );
+    await page.keyboard.press("ArrowUp");
+    for (let step = 0; step < index; step++)
+      await page.keyboard.press("ArrowDown");
+    assert.equal(await card.isChecked(), true);
+    assert.equal(await addDialog.locator(".button-submit").isEnabled(), true);
+    if (index === 0) {
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(300);
+      assert.deepEqual(
+        await buttonStyle(addDialog.locator(".button-submit")),
+        nativeButton,
+        "add buttons use shared styling",
+      );
+    }
+    if (index > 0) {
+      await addDialog
+        .getByRole("radio", { name: "Find automatically", exact: true })
+        .focus();
+      await page.keyboard.press("ArrowRight");
+      assert.equal(
+        await addDialog.locator("#themeAddUrl").isVisible(),
+        true,
+        "source radio arrows reveal the URL field",
+      );
+      await page.keyboard.press("ArrowLeft");
+      assert.equal(
+        await addDialog.locator("#themeAddUrl").isDisabled(),
+        true,
+        "switching back disables the hidden URL field",
+      );
+      await page.keyboard.press("ArrowRight");
+      if (index === 1)
+        assert.deepEqual(
+          await captureStates(
+            addDialog.locator("#themeAddUrl"),
+            "https://youtu.be/aaaaaaaaaaa",
+          ),
+          nativeStates,
+          "add URL uses the shared Material field styling",
+        );
+      await addDialog.locator("#themeAddUrl").fill("https://example.com/audio");
+      await addDialog
+        .getByRole("button", { name: "Add theme", exact: true })
+        .click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector(".themeAddStatus").textContent ===
+          "Enter a YouTube video URL.",
+      );
+      await addDialog
+        .locator("#themeAddUrl")
+        .fill("https://youtu.be/aaaaaaaaaaa");
+    }
+    assert.equal(
+      await addDialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+      true,
+      "the add dialog fits its viewport",
+    );
+    await addDialog
+      .getByRole("button", { name: "Add theme", exact: true })
+      .click();
+    await addDialog.waitFor({ state: "detached" });
+    await page.waitForFunction(() => document.activeElement.id === "themeAdd");
+    const queuedRow = page.locator(
+      `#themeRows tr[data-item-id="${result.ItemId}"]`,
+    );
+    await queuedRow.waitFor({ state: "visible" });
+    assert.equal(
+      await page.evaluate(
+        (name) => window.jellyScoreToasts.includes(name + " added to queue."),
+        result.Name,
+      ),
+      true,
+      "adding an item confirms it entered the shared queue",
+    );
+    assert.equal(
+      await queuedRow.locator(".themeRowBusy").textContent(),
+      "syncQueued…",
+    );
+    assert.ok(additions.at(-1).url.endsWith(result.ItemId + "/add"));
+    assert.equal(
+      additions.at(-1).body.YouTubeUrl,
+      index === 0 ? null : "https://youtu.be/aaaaaaaaaaa",
+    );
+  }
+  await page.reload();
+  await page.locator("#themeRows tr").first().waitFor({ state: "visible" });
+  assert.equal(
+    await page.locator("#themeRows tr").count(),
+    3,
+    "queued adds stay visible after reloading the page",
+  );
+  queuedAdds[0].Processing = false;
+  queuedAdds[0].Code = "searchFailed";
+  queuedAdds[0].Stage = "Failed";
+  const failedRow = page.locator("#themeRows tr").first();
+  await failedRow.locator("summary").waitFor({ state: "visible" });
+  await failedRow.locator("summary").click();
+  await failedRow
+    .getByRole("button", { name: "Try again", exact: true })
+    .waitFor({ state: "visible" });
+  assert.equal(
+    await page
+      .locator("#themeRows tr")
+      .first()
+      .locator(".themeRowError")
+      .isVisible(),
+    true,
+    "queued failures show a row error and retry action",
+  );
+  assert.equal(
+    await page
+      .locator("#themeRows")
+      .getByRole("button", { name: "Remove from list", exact: true })
+      .count(),
+    1,
+    "only failed adds can be dismissed",
+  );
+  scanStatus = { ...scanStatus, Running: true };
+  const dismissButton = failedRow.getByRole("button", {
+    name: "Remove from list",
+    exact: true,
+  });
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("#themeRows button")].find(
+        (button) => button.dataset.themeAction === "Remove from list",
+      )?.disabled,
+  );
+  assert.equal(
+    await dismissButton.isDisabled(),
+    true,
+    "failed-add dismissal is disabled during a scan",
+  );
+  await page.waitForTimeout(300);
+  assert.deepEqual(
+    await disabledStyle(dismissButton),
+    await disabledStyle(page.locator("#themeAdd")),
+    "failed-add actions use the same disabled style",
+  );
+  scanStatus = { ...scanStatus, Running: false };
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("#themeRows button")].find(
+        (button) => button.dataset.themeAction === "Remove from list",
+      )?.disabled === false,
+  );
+  await dismissButton.click();
+  await page.waitForFunction(
+    () => document.querySelectorAll("#themeRows tr").length === 2,
+  );
+  assert.deepEqual(dismissedAdds, [available[0].ItemId]);
+  // Give each fresh page the resolved locale that the plugin reads from Jellyfin.
+  await page.addInitScript(() => {
+    Object.defineProperty(HTMLHtmlElement.prototype, "lang", {
+      configurable: true,
+      get() {
+        return (
+          sessionStorage.getItem("jellyScoreTestLocale") ||
+          this.getAttribute("lang")
+        );
+      },
+      set(value) {
+        this.setAttribute("lang", value);
+      },
+    });
+  });
+  const localeDirectory = new URL(
+    "../../Jellyfin.Plugin.JellyScore/Strings/",
+    import.meta.url,
+  );
+  for (const file of readdirSync(localeDirectory).filter((file) =>
+    file.endsWith(".json"),
+  )) {
+    const locale = file.replace(/\.json$/, "");
+    const dictionary = JSON.parse(
+      readFileSync(new URL(file, localeDirectory), "utf8"),
+    );
+    queuedAdds.length = 0;
+    await page.evaluate((locale) => {
+      sessionStorage.setItem("jellyScoreTestLocale", locale);
+    }, locale);
+    await page.reload();
+    await page.waitForFunction(
+      (label) =>
+        document.querySelector("#themeAdd span[data-i18n]")?.textContent ===
+        label,
+      dictionary.addTheme,
+    );
+    await page.evaluate(() => {
+      window.jellyScoreToasts = [];
+      const alert = Dashboard.alert;
+      Dashboard.alert = (text) => {
+        window.jellyScoreToasts.push(text);
+        return alert(text);
+      };
+    });
+    await page.locator("#themeBulkMenu summary").click();
+    await page.locator("#themeAdd").click();
+    const dialog = page.locator("#themeSongsAdd");
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(
+      await dialog.locator("h3").textContent(),
+      dictionary.addTheme,
+      locale + ": modal title",
+    );
+    assert.equal(
+      await dialog.locator(".fieldDescription").first().textContent(),
+      dictionary.addThemeHelp,
+      locale + ": modal help",
+    );
+    const search = dialog.getByLabel(dictionary.searchLibrary);
+    await search.fill("No match");
+    await page.waitForFunction(
+      (label) =>
+        document.querySelector(".themeAddSearchStatus")?.textContent === label,
+      dictionary.noItemsFound,
+    );
+    await search.fill("Unthemed");
+    await page.waitForFunction(
+      (label) =>
+        document.querySelector(".themeAddAnnouncements")?.textContent === label,
+      dictionary.resultsFound.replace("{0}", "3"),
+    );
+    assert.equal(
+      await dialog
+        .getByRole("radio", { name: dictionary.youTubeLink, exact: true })
+        .count(),
+      1,
+      locale + ": source option",
+    );
+    await dialog.locator(".themeAddResults input").first().check();
+    await dialog
+      .getByRole("button", { name: dictionary.addTheme, exact: true })
+      .click();
+    await dialog.waitFor({ state: "detached" });
+    await page.waitForFunction(
+      (label) => window.jellyScoreToasts.includes(label),
+      dictionary.itemQueued.replace("{0}", available[0].Name),
+    );
+    const row = page.locator("#themeRows tr").first();
+    await row.waitFor({ state: "visible" });
+    assert.equal(
+      await row.locator(".themeRowBusy").textContent(),
+      "sync" + dictionary.queued,
+      locale + ": queued status",
+    );
+    queuedAdds[0].Processing = false;
+    queuedAdds[0].Code = "searchFailed";
+    queuedAdds[0].Stage = "Failed";
+    await row.locator("summary").waitFor({ state: "visible" });
+    await row.locator("summary").click();
+    assert.equal(
+      await row
+        .getByRole("button", { name: dictionary.tryAgain, exact: true })
+        .count(),
+      1,
+      locale + ": retry action",
+    );
+    await row
+      .getByRole("button", { name: dictionary.youTubeLink, exact: true })
+      .click();
+    const source = page.locator("#themeSongsEdit");
+    await source.waitFor({ state: "visible" });
+    assert.equal(
+      await source.locator(".fieldDescription").textContent(),
+      dictionary.pasteYouTubeLink,
+      locale + ": source help",
+    );
+    await source
+      .getByRole("button", { name: dictionary.cancel, exact: true })
+      .click();
+    await source.waitFor({ state: "detached" });
+    await row.locator("summary").click();
+    await row
+      .getByRole("button", { name: dictionary.removeFromList, exact: true })
+      .click();
+    await page.locator("#themeEmpty").waitFor({ state: "visible" });
+  }
+  assert.deepEqual(errors, [], "the add modal has no browser errors");
   await page.unrouteAll({ behavior: "wait" });
   console.log(
     "Material controls, keyboard navigation, mobile layout, dialogs, and custom audio playback passed",

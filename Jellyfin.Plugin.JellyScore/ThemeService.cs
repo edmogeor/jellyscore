@@ -70,6 +70,62 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         return rows.Where(r => !removed.Contains(r.ItemId)).ToArray();
     }
     public string? Outcome(Guid id) => store.Read(s => s.Outcomes.GetValueOrDefault(id));
+
+    internal static string ErrorCode(Exception e, string fallback) => e.Message switch
+    {
+        "Theme changed elsewhere. The file was left untouched." or "Theme changed elsewhere. It was not deleted." or
+            "Theme changed during download. The file was left untouched." => "themeChanged",
+        "Another theme appeared. The file was left untouched." => "anotherTheme",
+        "No managed theme to refresh." or "No managed theme." or "Item no longer exists." => "themeUnavailable",
+        "Item is not in a selected library." or "Unsupported item." or "Movie needs a dedicated physical folder." or
+            "Item needs a physical folder inside its library." or "Item folder is missing or unwritable." or
+            "Collection has no matching movie or physical folder." => "themeLocationUnavailable",
+        "Item title is not ready; retry after metadata refresh." => "itemNotReady",
+        _ when e is SearchFailure => "searchFailed",
+        _ when e is DownloadFailure => "downloadFailed",
+        _ => fallback
+    };
+
+    public ManagedTheme PrepareRequest(Guid id, bool replacement, string? youtubeUrl)
+    {
+        var item = library.GetItemById(id) ?? throw new InvalidOperationException("Item no longer exists.");
+        var (folder, libraryName, libraryId) = Location(item);
+        if (replacement)
+        {
+            var managed = store.Read(s => s.Themes.GetValueOrDefault(id)) ?? throw new InvalidOperationException("No managed theme to refresh.");
+            if (!Owned(managed, item, folder)) throw new InvalidOperationException("Theme changed elsewhere. The file was left untouched.");
+            return managed;
+        }
+        if (store.Read(s => s.Themes.ContainsKey(id)) || OtherTheme(item, folder, null))
+            throw new InvalidOperationException("Another theme appeared. The file was left untouched.");
+        return new ManagedTheme { ItemId = id, Name = item.Name, Year = item.ProductionYear,
+            Kind = item switch { Movie => "Movie", BoxSet => "Collection", _ => "Series" },
+            Library = libraryName, LibraryId = libraryId, Folder = folder,
+            Path = Path.Combine(folder, JellyScoreConstants.ThemeFile), SourceUrl = youtubeUrl, Date = DateTimeOffset.UtcNow };
+    }
+    public object[] AddItems(string? search, IReadOnlySet<Guid>? queued = null)
+    {
+        if (string.IsNullOrWhiteSpace(search) || search.Trim().Length < 2) return [];
+        return library.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [Jellyfin.Data.Enums.BaseItemKind.Movie, Jellyfin.Data.Enums.BaseItemKind.Series, Jellyfin.Data.Enums.BaseItemKind.BoxSet],
+            Recursive = true, SearchTerm = search.Trim(), Limit = 100
+        }).Select(item =>
+        {
+            try
+            {
+                var (folder, libraryName, _) = Location(item);
+                if (queued?.Contains(item.Id) != true && !store.Read(s => s.Themes.ContainsKey(item.Id)) && !OtherTheme(item, folder, null))
+                    return (object)new
+                    {
+                        ItemId = item.Id, item.Name, Year = item.ProductionYear, Library = libraryName,
+                        Kind = item switch { Movie => "Movie", BoxSet => "Collection", _ => "Series" }
+                    };
+            }
+            catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException) { }
+            return null;
+        }).OfType<object>().Take(20).ToArray();
+    }
     public static string Status(ManagedTheme record)
     {
         try
@@ -91,7 +147,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         return path;
     }
 
-    private (string Folder, string Library, Guid LibraryId) Location(BaseItem item)
+    private (string Folder, string Library, Guid LibraryId) Location(BaseItem item, bool requireSelected = false)
     {
         if (item is not (Movie or Series or BoxSet) || item.IsVirtualItem || item.ExtraType is not null || item.SourceType != SourceType.Library)
             throw new InvalidOperationException("Unsupported item.");
@@ -102,7 +158,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                     string.Equals(FranchiseTitle(movie.TmdbCollectionName), FranchiseTitle(boxSet.Name), StringComparison.OrdinalIgnoreCase));
             if (member is null || string.IsNullOrWhiteSpace(boxSet.Path) || !Directory.Exists(boxSet.Path))
                 throw new InvalidOperationException("Collection has no matching movie or physical folder.");
-            var selectedLibrary = library.GetCollectionFolders(boxSet).FirstOrDefault(f => Plugin.Instance.Configuration.Libraries is null ||
+            var selectedLibrary = library.GetCollectionFolders(boxSet).FirstOrDefault(f => !requireSelected || Plugin.Instance.Configuration.Libraries is null ||
                 Plugin.Instance.Configuration.Libraries.Contains(f.Id)) ?? throw new InvalidOperationException("Item is not in a selected library.");
             var collectionFolder = Canonical(boxSet.Path);
             if (!selectedLibrary.PhysicalLocations.Append(selectedLibrary.Path).Where(Directory.Exists).Select(Canonical)
@@ -112,7 +168,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         }
         var folders = library.GetCollectionFolders(item);
         var selectedLibraries = Plugin.Instance.Configuration.Libraries;
-        var selected = folders.FirstOrDefault(f => selectedLibraries is null || selectedLibraries.Contains(f.Id));
+        var selected = folders.FirstOrDefault(f => !requireSelected || selectedLibraries is null || selectedLibraries.Contains(f.Id));
         if (selected is null) throw new InvalidOperationException("Item is not in a selected library.");
         var folder = Canonical(item is Series ? item.Path : Path.GetDirectoryName(item.Path)!);
         var roots = selected.PhysicalLocations.Append(selected.Path).Where(Directory.Exists).Select(Canonical).ToArray();
@@ -182,17 +238,16 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         }
     }
 
-    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null, string? youtubeUrl = null)
+    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null, string? youtubeUrl = null, bool administratorAdd = false)
     {
         var manualVideoId = youtubeUrl is null ? null : YouTube.VideoId(youtubeUrl) ?? throw new InvalidOperationException("Invalid YouTube URL.");
-        if (manualVideoId is not null && !replacement) throw new InvalidOperationException("No managed theme to refresh.");
         var gate = _locks.GetOrAdd(id, _ => new SemaphoreSlim(1));
         await gate.WaitAsync(ct);
         try
         {
             var item = library.GetItemById(id) ?? throw new InvalidOperationException("Item no longer exists.");
-            var (folder, libraryName, libraryId) = Location(item);
-            if (!replacement && item is Movie movie && !string.IsNullOrWhiteSpace(movie.TmdbCollectionName))
+            var (folder, libraryName, libraryId) = Location(item, requireSelected: !replacement && !administratorAdd);
+            if (!replacement && !administratorAdd && item is Movie movie && !string.IsNullOrWhiteSpace(movie.TmdbCollectionName))
             {
                 var collection = library.GetItemList(new InternalItemsQuery { IncludeItemTypes = [Jellyfin.Data.Enums.BaseItemKind.BoxSet] })
                     .OfType<BoxSet>().FirstOrDefault(boxSet =>
@@ -210,7 +265,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
             if (replacement && existing is null) throw new InvalidOperationException("No managed theme to refresh.");
             if (existing is not null && !Owned(existing, item, folder)) throw new InvalidOperationException("Theme changed elsewhere. The file was left untouched.");
             if (!replacement && existing is not null) return new("Already themed");
-            if (!replacement && store.Read(s => s.Suppressed.Contains(id))) return new("Suppressed until rescan");
+            if (!replacement && !administratorAdd && store.Read(s => s.Suppressed.Contains(id))) return new("Suppressed until rescan");
             if (OtherTheme(item, folder, existing?.Path)) return new("Already themed");
             if (string.IsNullOrWhiteSpace(item.Name)) throw new InvalidOperationException("Item title is not ready; retry after metadata refresh.");
             var work = new Work(item.Name, item.OriginalTitle, item.ProductionYear, item is Series);
@@ -261,6 +316,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                         Hash = hash, Score = source.Score, Evidence = source.Evidence, Date = date,
                         AddedAt = existing?.AddedAt ?? existing?.Date ?? date };
                     s.Outcomes[id] = result;
+                    s.Suppressed.Remove(id);
                 });
                 Refresh(item);
                 return new(result);

@@ -14,6 +14,86 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.JellyScore;
 
+public sealed record ThemeProcessingJob(ManagedTheme Theme, string? YouTubeUrl, bool Replacement, string Stage = "queued", bool Processing = true, string? Code = null, string? Result = null)
+{
+    public Guid RequestId { get; } = Guid.NewGuid();
+}
+
+public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProcessingWorker> logger) : BackgroundService
+{
+    private readonly Channel<ThemeProcessingJob> _queue = Channel.CreateBounded<ThemeProcessingJob>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { SingleReader = true });
+    private readonly Dictionary<Guid, ThemeProcessingJob> _jobs = new();
+    private readonly Lock _gate = new();
+
+    public ThemeProcessingJob[] List()
+    {
+        lock (_gate) return _jobs.Values.GroupBy(job => job.Theme.ItemId)
+            .Select(jobs => jobs.FirstOrDefault(job => job.Processing) ?? jobs.Last()).ToArray();
+    }
+
+    public void Enqueue(Guid id, string? youtubeUrl, bool replacement = false)
+    {
+        lock (_gate)
+        {
+            var job = new ThemeProcessingJob(themes.PrepareRequest(id, replacement, youtubeUrl), youtubeUrl, replacement);
+            _jobs[job.RequestId] = job;
+            if (!_queue.Writer.TryWrite(job))
+            {
+                _jobs.Remove(job.RequestId);
+                throw new InvalidOperationException("The processing queue is full. Please retry.");
+            }
+            RemoveCompleted(id, job.RequestId);
+        }
+    }
+
+    private void RemoveCompleted(Guid itemId, Guid except)
+    {
+        foreach (var job in _jobs.Values.Where(job => job.Theme.ItemId == itemId && !job.Processing && job.RequestId != except).ToArray())
+            _jobs.Remove(job.RequestId);
+    }
+
+    public bool Dismiss(Guid itemId)
+    {
+        lock (_gate)
+        {
+            var jobs = _jobs.Values.Where(job => job.Theme.ItemId == itemId).ToArray();
+            if (jobs.Length == 0 || jobs.Any(job => job.Processing || job.Replacement || job.Code is null)) return false;
+            foreach (var job in jobs) _jobs.Remove(job.RequestId);
+            return true;
+        }
+    }
+
+    private void Update(Guid id, string stage, bool processing = true, string? code = null, string? result = null)
+    {
+        lock (_gate)
+        {
+            _jobs[id] = _jobs[id] with { Stage = stage, Processing = processing, Code = code, Result = result };
+            if (!processing) RemoveCompleted(_jobs[id].Theme.ItemId, id);
+        }
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        await foreach (var job in _queue.Reader.ReadAllAsync(ct))
+        {
+            var id = job.RequestId;
+            try
+            {
+                Update(id, "stagePreparing");
+                var result = await themes.Process(job.Theme.ItemId, job.Replacement, ct, stage => Update(id, stage), job.YouTubeUrl, administratorAdd: !job.Replacement);
+                if (!job.Replacement && result.Result is "Added" or "Already themed") { lock (_gate) _jobs.Remove(id); }
+                else Update(id, "Finished", false, result.ReasonCode ?? (job.Replacement ? null : "reasonNoMatch"), result.Result);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+            catch (Exception e)
+            {
+                Update(id, "Failed", false, ThemeService.ErrorCode(e, job.Replacement ? "refreshFailed" : "requestFailed"));
+                logger.LogWarning(e, "Queued theme processing failed for {ItemId}", job.Theme.ItemId);
+            }
+        }
+    }
+}
+
 public sealed class NewItemWorker(ILibraryManager library, ICollectionManager collections, ThemeService themes, ILogger<NewItemWorker> logger) : BackgroundService
 {
     private readonly Channel<Guid> _queue = Channel.CreateBounded<Guid>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });

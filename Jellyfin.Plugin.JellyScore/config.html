@@ -5,15 +5,16 @@
   data-require="emby-button,emby-checkbox"
 >
   <style>
-    #themeSongsEdit .formDialogFooter {
+    :is(#themeSongsAdd, #themeSongsEdit) .formDialogFooter {
       display: flex;
       gap: 0.5rem;
     }
-    #themeSongsEdit .formDialogFooterItem {
+    :is(#themeSongsAdd, #themeSongsEdit) .formDialogFooterItem {
       flex: 1;
       width: auto;
       margin: 0;
     }
+    #themeSongsAdd .formDialogHeaderTitle,
     #themeSongsEdit .formDialogHeaderTitle,
     #themeSongsConfirm .formDialogHeaderTitle,
     #themeSongsPlayer .formDialogHeaderTitle {
@@ -172,9 +173,15 @@
       button[data-destructive]:hover:not(:disabled) {
       color: var(--jf-palette-error-main);
     }
-    #themeSongsPage .themeMenuItems button:disabled {
-      opacity: 0.35;
+    #themeSongsPage .themeMenuItems button.emby-button:disabled,
+    #themeSongsPage .themeMenuItems button.emby-button:disabled:hover {
+      background: transparent;
+      color: var(--jf-palette-action-disabled);
+      opacity: 1;
       cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+      transition: none;
     }
     #themeSongsPage .themeMenuItems :is(a, button).emby-button:focus-visible {
       outline: 2px solid var(--jf-palette-primary-main);
@@ -255,7 +262,8 @@
       outline-offset: -2px;
     }
     /* Jellyfin theme.ts: contained buttons, large size, Noto Sans, no capitals. */
-    :is(#themeSongsPage, #themeSongsEdit, #themeSongsPlayer) .raised {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit, #themeSongsPlayer)
+      .raised {
       box-sizing: border-box;
       padding: 8px 22px;
       border: 0;
@@ -275,35 +283,38 @@
         background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
         box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    :is(#themeSongsPage, #themeSongsEdit)
-      :is(.button-submit, #themeScanStart, #themeDownloaderRetry) {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      :is(.button-submit, #themeScanStart, #themeDownloaderRetry):not(
+        :disabled
+      ) {
       background: var(--jf-palette-primary-main);
       color: var(--jf-palette-primary-contrastText);
     }
     @media (hover: hover) {
-      :is(#themeSongsPage, #themeSongsEdit, #themeSongsPlayer)
+      :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit, #themeSongsPlayer)
         .raised:hover:not(:disabled) {
         background: var(--jf-palette-Button-inheritContainedHoverBg);
         box-shadow: var(--jf-shadows-4);
       }
-      :is(#themeSongsPage, #themeSongsEdit)
+      :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
         :is(.button-submit, #themeScanStart, #themeDownloaderRetry):hover:not(
           :disabled
         ) {
         background: var(--jf-palette-primary-dark);
       }
     }
-    :is(#themeSongsPage, #themeSongsEdit, #themeSongsPlayer)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit, #themeSongsPlayer)
       .raised:active:not(:disabled) {
       box-shadow: var(--jf-shadows-8);
     }
-    :is(#themeSongsPage, #themeSongsEdit, #themeSongsPlayer)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit, #themeSongsPlayer)
       .raised:focus-visible {
       outline: 2px solid var(--jf-palette-primary-main);
       outline-offset: 2px;
       box-shadow: var(--jf-shadows-6);
     }
-    :is(#themeSongsPage, #themeSongsEdit, #themeSongsPlayer) .raised:disabled {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit, #themeSongsPlayer)
+      .raised:disabled {
       background: var(--jf-palette-action-disabledBackground);
       color: var(--jf-palette-action-disabled);
       box-shadow: none;
@@ -328,7 +339,106 @@
       width: min(32rem, calc(100vw - 2rem));
       max-height: calc(100dvh - 2rem);
     }
-    :is(#themeSongsEdit, #themeSongsPlayer) .dialogContentInner {
+    #themeSongsAdd {
+      width: min(40rem, calc(100vw - 2rem));
+      max-height: calc(100dvh - 2rem);
+    }
+    #themeSongsAdd [hidden] {
+      display: none !important;
+    }
+    #themeSongsAdd .themeAddAnnouncements {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+    #themeSongsAdd .themeItemSearch {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    #themeSongsAdd .themeItemSearch .inputContainer {
+      flex: 1;
+      min-width: 0;
+      margin-bottom: 0;
+    }
+    #themeSongsAdd fieldset {
+      min-width: 0;
+      padding: 0;
+      margin: 0 0 1.25rem;
+      border: 0;
+    }
+    #themeSongsAdd legend {
+      padding: 0;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+    #themeSongsAdd .themeAddResults {
+      display: grid;
+      gap: 0.5rem;
+      max-height: 18rem;
+      overflow-y: auto;
+      padding: 3px;
+    }
+    #themeSongsAdd .themeChoice {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.8rem 1rem;
+      border: 1px solid var(--jf-palette-divider);
+      border-radius: 0.4rem;
+      background: var(--jf-palette-background-paper);
+      color: var(--jf-palette-text-primary);
+      cursor: pointer;
+      overflow-wrap: anywhere;
+    }
+    #themeSongsAdd .themeChoice:hover {
+      background: var(--jf-palette-action-hover);
+    }
+    #themeSongsAdd .themeChoice:has(:checked) {
+      border-color: var(--jf-palette-primary-main);
+      background: rgba(
+        var(--jf-palette-primary-mainChannel) /
+          var(--jf-palette-action-selectedOpacity)
+      );
+    }
+    #themeSongsAdd .themeChoice:has(:focus-visible) {
+      outline: 2px solid var(--jf-palette-primary-main);
+      outline-offset: 1px;
+    }
+    #themeSongsAdd .themeChoice:has(:disabled) {
+      opacity: 0.5;
+      cursor: default;
+    }
+    #themeSongsAdd .themeChoice input {
+      flex-shrink: 0;
+      width: 1.25rem;
+      height: 1.25rem;
+      margin: 0;
+      accent-color: var(--jf-palette-primary-main);
+    }
+    #themeSongsAdd .themeChoice strong {
+      display: block;
+      font-weight: 600;
+    }
+    #themeSongsAdd .themeChoice .themeChoiceDetails {
+      margin-top: 0.2rem;
+      color: var(--jf-palette-text-secondary);
+      font-size: 0.875rem;
+    }
+    #themeSongsAdd .themeSourceChoices {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+      gap: 0.5rem;
+    }
+    :is(#themeSongsAdd, #themeSongsEdit, #themeSongsPlayer)
+      .dialogContentInner {
       box-sizing: border-box;
       width: 100%;
       max-width: none;
@@ -371,7 +481,7 @@
     #themeSongsPlayer [hidden] {
       display: none !important;
     }
-    :is(#themeSongsEdit, #themeSongsPlayer) .formDialogFooter {
+    :is(#themeSongsAdd, #themeSongsEdit, #themeSongsPlayer) .formDialogFooter {
       position: static;
       width: auto;
       margin: 1rem 0 0;
@@ -411,10 +521,10 @@
     #themeSongsPage #themeCookiesHelp a {
       color: var(--jf-palette-primary-main);
     }
-    #themeSongsPage .inputContainer {
+    :is(#themeSongsPage, #themeSongsAdd) .inputContainer {
       margin-bottom: 1.25rem;
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit) .themeMaterialField {
       position: relative;
       display: flex;
       font-family: "Noto Sans", sans-serif;
@@ -427,19 +537,21 @@
       );
       transition: background-color 0.2s cubic-bezier(0, 0, 0.2, 1);
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField:hover {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField:hover {
       background: var(
         --jf-palette-FilledInput-hoverBg,
         color-mix(in srgb, var(--jf-palette-text-primary) 13%, transparent)
       );
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField:focus-within {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField:focus-within {
       background: var(
         --jf-palette-FilledInput-bg,
         color-mix(in srgb, var(--jf-palette-text-primary) 9%, transparent)
       );
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField
       + .fieldDescription {
       margin: 3px 14px 0;
@@ -449,8 +561,10 @@
       line-height: 1.66;
       letter-spacing: normal;
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField::before,
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField::after {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField::before,
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField::after {
       content: "";
       position: absolute;
       inset: auto 0 0;
@@ -461,19 +575,23 @@
             var(--jf-opacity-inputUnderline)
         );
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField:hover::before {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField:hover::before {
       border-bottom-color: var(--jf-palette-text-primary);
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField::after {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField::after {
       border-bottom: 2px solid var(--jf-palette-primary-main);
       transform: scaleX(0);
       transition: transform 0.2s cubic-bezier(0, 0, 0.2, 1);
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:focus-within::after {
       transform: scaleX(1) translateX(0);
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField > label {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField
+      > label {
       position: absolute;
       top: 0;
       left: 0;
@@ -492,21 +610,21 @@
         color 0.2s cubic-bezier(0, 0, 0.2, 1);
       cursor: text;
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:focus-within
       > label,
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:has(:is(input, textarea):not(:placeholder-shown))
       > label {
       transform: translate(12px, 7px) scale(0.75);
       max-width: calc((100% - 24px) / 0.75);
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:focus-within
       > label {
       color: var(--jf-palette-primary-main);
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField
       > :is(input, textarea) {
       display: block;
@@ -528,44 +646,47 @@
       line-height: 1.4375;
       letter-spacing: inherit;
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField > textarea {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField
+      > textarea {
       height: auto;
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField
       > :is(input, textarea)::placeholder {
       color: var(--jf-palette-text-secondary);
       opacity: 0;
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:focus-within
       > :is(input, textarea)::placeholder {
       opacity: 1;
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:has(:user-invalid)
       > label {
       color: var(--jf-palette-error-main);
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:has(:user-invalid)::before,
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:has(:user-invalid)::after {
       border-bottom-color: var(--jf-palette-error-main);
     }
-    :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField:has(:disabled) {
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+      .themeMaterialField:has(:disabled) {
       background: var(
         --jf-palette-FilledInput-disabledBg,
         var(--jf-palette-action-disabledBackground)
       );
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:has(:disabled)
       > :is(label, input, textarea) {
       color: var(--jf-palette-text-disabled);
       cursor: default;
     }
-    :is(#themeSongsPage, #themeSongsEdit)
+    :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
       .themeMaterialField:has(:disabled)::before {
       border-bottom-style: dotted;
     }
@@ -615,7 +736,7 @@
       > p:first-child {
       margin-top: 0;
     }
-    #themeSongsPage .themeSearch > .material-icons {
+    :is(#themeSongsPage, #themeSongsAdd) .themeSearch > .material-icons {
       position: absolute;
       left: 12px;
       top: 50%;
@@ -623,14 +744,16 @@
       color: var(--jf-palette-text-secondary);
       pointer-events: none;
     }
-    #themeSongsPage .themeSearch input {
+    :is(#themeSongsPage, #themeSongsAdd) .themeSearch input {
       padding-left: 44px;
       padding-right: 52px;
     }
-    #themeSongsPage #themeSearch::-webkit-search-cancel-button {
+    :is(#themeSongsPage, #themeSongsAdd)
+      .themeSearch
+      input::-webkit-search-cancel-button {
       appearance: none;
     }
-    #themeSongsPage #themeSearchClear {
+    :is(#themeSongsPage, #themeSongsAdd) .themeSearch > button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -647,10 +770,10 @@
       background: transparent;
       color: var(--jf-palette-text-secondary);
     }
-    #themeSongsPage #themeSearchClear:hover {
+    :is(#themeSongsPage, #themeSongsAdd) .themeSearch > button:hover {
       background: var(--jf-palette-action-hover);
     }
-    #themeSongsPage #themeSearchClear:focus-visible {
+    :is(#themeSongsPage, #themeSongsAdd) .themeSearch > button:focus-visible {
       outline: 2px solid var(--jf-palette-primary-main);
       outline-offset: -2px;
     }
@@ -658,12 +781,14 @@
       margin: 0.5rem 0 1rem;
       font-size: 0.875rem;
     }
-    #themeSongsPage .themeSearch > label {
+    :is(#themeSongsPage, #themeSongsAdd) .themeSearch > label {
       transform: translate(44px, 16px);
       max-width: calc(100% - 96px);
     }
-    #themeSongsPage .themeSearch:focus-within > label,
-    #themeSongsPage .themeSearch:has(input:not(:placeholder-shown)) > label {
+    :is(#themeSongsPage, #themeSongsAdd) .themeSearch:focus-within > label,
+    :is(#themeSongsPage, #themeSongsAdd)
+      .themeSearch:has(input:not(:placeholder-shown))
+      > label {
       transform: translate(44px, 7px) scale(0.75);
       max-width: calc((100% - 96px) / 0.75);
     }
@@ -884,9 +1009,12 @@
       border-radius: 999px;
     }
     @media (prefers-reduced-motion: reduce) {
-      :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField,
-      :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField > label,
-      :is(#themeSongsPage, #themeSongsEdit) .themeMaterialField::after {
+      :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit) .themeMaterialField,
+      :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+        .themeMaterialField
+        > label,
+      :is(#themeSongsPage, #themeSongsAdd, #themeSongsEdit)
+        .themeMaterialField::after {
         transition: none;
       }
       #themeSongsPage .themeProgressLabel .material-icons,
@@ -915,12 +1043,12 @@
       align-items: center;
       gap: 0.25rem;
     }
-    #themeSongsPage .themeLibraryMetadata {
+    :is(#themeSongsPage, #themeSongsAdd) .themeLibraryMetadata {
       display: flex;
       align-items: center;
       gap: 0.375rem;
     }
-    #themeSongsPage .themeLibraryMetadata .material-icons {
+    :is(#themeSongsPage, #themeSongsAdd) .themeLibraryMetadata .material-icons {
       font-size: 1.125rem;
       flex-shrink: 0;
     }
@@ -1336,7 +1464,7 @@
             <span data-i18n="manageDownloads">{{manageDownloads}}</span
             ><span id="themeDownloadCount" class="themeTotal"></span>
           </h3>
-          <details id="themeBulkMenu" class="themeMenu" hidden>
+          <details id="themeBulkMenu" class="themeMenu">
             <summary
               aria-label="{{downloadActions}}"
               data-i18n-aria-label="downloadActions"
@@ -1346,6 +1474,10 @@
               <span class="material-icons" aria-hidden="true">more_vert</span>
             </summary>
             <div class="themeMenuItems">
+              <button is="emby-button" id="themeAdd" class="emby-button">
+                <span class="material-icons" aria-hidden="true">add</span>
+                <span data-i18n="addTheme">{{addTheme}}</span>
+              </button>
               <button
                 is="emby-button"
                 id="themeDeleteAll"
@@ -1524,6 +1656,9 @@
         allTotal = 0;
       let scanRunning = false;
       let bulkBusy = false;
+      let managedTotal = 0;
+      let addsProcessing = false;
+      let renderedRowsKey = "";
       let downloaderFailed = false;
       let downloaderFailureCode = "downloaderInstallFailed";
       let confirming = false;
@@ -1531,8 +1666,6 @@
       let lastIssuesKey = "";
       const refreshingItems = new Set();
       const refreshErrors = new Map();
-      let refreshQueue = Promise.resolve();
-      let activeRefreshItem = null;
       let savedSettings = "";
       let settingsLoaded = false;
       let settingsSaving = false;
@@ -1562,12 +1695,46 @@
         span.textContent = name;
         return span;
       };
-      const localize = () => {
-        page.querySelectorAll("[data-i18n]").forEach((el) => {
+      const kindIcon = (kind) => {
+        const span = icon(
+          { Movie: "movie", Series: "tv", Collection: "collections_bookmark" }[
+            kind
+          ] || "folder",
+        );
+        span.title = t("kind" + kind);
+        return span;
+      };
+      const actionMenu = (item, buttons) => {
+        const menu = document.createElement("details");
+        menu.className = "themeMenu";
+        const toggle = document.createElement("summary");
+        toggle.setAttribute("aria-label", t("actionsFor", item.Name));
+        toggle.title = t("actionsFor", item.Name);
+        toggle.append(icon("more_vert"));
+        const menuItems = document.createElement("div");
+        menuItems.className = "themeMenuItems";
+        for (const button of buttons) {
+          const label = document.createElement("span");
+          label.textContent = button.dataset.themeAction;
+          button.append(label);
+          button.addEventListener("click", () => {
+            menu.open = false;
+            toggle.focus();
+          });
+          menuItems.append(button);
+        }
+        menu.append(toggle, menuItems);
+        const actions = document.createElement("div");
+        actions.className = "themeRowActions";
+        actions.append(menu);
+        return actions;
+      };
+      const localize = (root = page) => {
+        root.querySelectorAll("[data-i18n]").forEach((el) => {
           el.textContent = t(el.dataset.i18n);
         });
         for (const attribute of ["placeholder", "aria-label", "title"]) {
-          page
+          root
             .querySelectorAll("[data-i18n-" + attribute + "]")
             .forEach((el) => {
               el.setAttribute(
@@ -1721,9 +1888,19 @@
       });
       const updateRowActions = () => {
         const removeAll = $("#themeDeleteAll");
-        removeAll.hidden = allTotal === 0;
-        $("#themeBulkMenu").hidden = allTotal === 0;
-        removeAll.disabled = scanRunning || bulkBusy || allTotal === 0;
+        const add = $("#themeAdd");
+        const busyTitle = scanRunning ? t("availableAfterScan") : t("working");
+        removeAll.hidden = managedTotal === 0;
+        add.disabled = scanRunning || bulkBusy || downloaderFailed;
+        if (scanRunning || bulkBusy) add.title = busyTitle;
+        else if (downloaderFailed) add.title = t(downloaderFailureCode);
+        else add.title = t("addTheme");
+        removeAll.disabled =
+          scanRunning || bulkBusy || addsProcessing || managedTotal === 0;
+        removeAll.title =
+          scanRunning || bulkBusy || addsProcessing
+            ? busyTitle
+            : t("deleteAll");
         removeAll.querySelector("[data-i18n]").textContent = t(
           bulkBusy ? "deleting" : "deleteAll",
         );
@@ -1736,12 +1913,13 @@
           const busy =
             row.dataset.busy === "true" ||
             refreshingItems.has(row.dataset.itemId);
+          const scanBlocked = scanRunning && button.dataset.readOnly !== "true";
           button.disabled =
-            scanRunning ||
+            scanBlocked ||
             bulkBusy ||
             busy ||
             (downloaderFailed && button.dataset.requiresDownloader === "true");
-          if (scanRunning) button.title = t("availableAfterScan");
+          if (scanBlocked) button.title = t("availableAfterScan");
           else if (bulkBusy || busy) button.title = t("working");
           else if (
             downloaderFailed &&
@@ -1752,6 +1930,19 @@
             button.title =
               button.dataset.themeDescription ?? button.dataset.themeAction;
         }
+        const addForm = document.querySelector("#themeSongsAdd .themeAddForm");
+        if (addForm)
+          addForm.querySelector(".button-submit").disabled =
+            scanRunning ||
+            bulkBusy ||
+            downloaderFailed ||
+            addForm.getAttribute("aria-busy") === "true" ||
+            !addForm.querySelector('input[name="themeAddItem"]:checked');
+        const editSubmit = document.querySelector(
+          "#themeSongsEdit .button-submit",
+        );
+        if (editSubmit)
+          editSubmit.disabled = scanRunning || bulkBusy || downloaderFailed;
       };
       const confirmDelete = async (message, title, itemId = null) => {
         if (confirming) return false;
@@ -1774,6 +1965,245 @@
           confirming = false;
           focusRow(itemId);
         }
+      };
+      const addTheme = async () => {
+        if (confirming || scanRunning || bulkBusy || downloaderFailed) return;
+        confirming = true;
+        const helper = Dashboard.dialogHelper;
+        let dialog;
+        try {
+          dialog = helper.createDialog({
+            id: "themeSongsAdd",
+            removeOnClose: true,
+            scrollY: false,
+          });
+          dialog.classList.add("formDialog");
+          dialog.setAttribute("role", "dialog");
+          dialog.setAttribute("aria-modal", "true");
+          dialog.setAttribute("aria-labelledby", "themeSongsAddTitle");
+          dialog.innerHTML = `
+            <div class="formDialogHeader"><h3 id="themeSongsAddTitle" class="formDialogHeaderTitle" data-i18n="addTheme"></h3></div>
+            <div class="formDialogContent smoothScrollY"><div class="dialogContentInner dialogContentInner-mini">
+              <p class="fieldDescription" data-i18n="addThemeHelp"></p>
+              <div class="themeItemSearch">
+                <div class="inputContainer"><div class="themeMaterialField themeSearch">
+                  <span class="material-icons" aria-hidden="true">search</span>
+                  <label for="themeAddSearch" data-i18n="searchLibrary"></label>
+                  <input id="themeAddSearch" type="search" placeholder=" " aria-controls="themeAddResults" />
+                  <button is="emby-button" id="themeAddSearchClear" type="button" data-i18n-aria-label="clearSearch" data-i18n-title="clearSearch" hidden><span class="material-icons" aria-hidden="true">close</span></button>
+                </div></div>
+              </div>
+              <p class="themeAddAnnouncements" role="status" aria-live="polite" aria-atomic="true"></p>
+              <form class="themeAddForm">
+                <fieldset class="themeAddItems" hidden><legend data-i18n="chooseTitle"></legend>
+                  <p class="themeAddSearchStatus fieldDescription"></p>
+                  <div id="themeAddResults" class="themeAddResults"></div>
+                </fieldset>
+                <fieldset><legend data-i18n="themeSource"></legend><div class="themeSourceChoices">
+                  <label class="themeChoice"><input type="radio" name="themeAddMethod" value="automatic" checked /><span data-i18n="findAutomatically"></span></label>
+                  <label class="themeChoice"><input type="radio" name="themeAddMethod" value="youtube" /><span data-i18n="youTubeLink"></span></label>
+                </div></fieldset>
+                <div class="inputContainer themeAddUrl" hidden><div class="themeMaterialField">
+                  <label for="themeAddUrl" data-i18n="youTubeLink"></label>
+                  <input id="themeAddUrl" type="url" disabled placeholder="https://www.youtube.com/watch?v=…" />
+                </div></div>
+                <p class="themeAddStatus fieldDescription" role="status" aria-live="polite"></p>
+                <div class="formDialogFooter">
+                  <button is="emby-button" type="button" class="raised button-cancel block formDialogFooterItem" data-i18n="cancel"></button>
+                  <button is="emby-button" type="submit" class="raised button-submit block formDialogFooterItem" data-i18n="addTheme" disabled></button>
+                </div>
+              </form>
+            </div></div>`;
+          const searchInput = dialog.querySelector("#themeAddSearch");
+          const searchClear = dialog.querySelector("#themeAddSearchClear");
+          const searchStatus = dialog.querySelector(".themeAddSearchStatus");
+          const announcements = dialog.querySelector(".themeAddAnnouncements");
+          const form = dialog.querySelector(".themeAddForm");
+          const itemsField = dialog.querySelector(".themeAddItems");
+          const results = dialog.querySelector(".themeAddResults");
+          const methods = dialog.querySelector(".themeSourceChoices");
+          let selectedItem = null;
+          let selectedTitle = "";
+          let adding = false;
+          let searchTimer;
+          let searchRevision = 0;
+          const url = dialog.querySelector("#themeAddUrl");
+          const status = dialog.querySelector(".themeAddStatus");
+          const submit = dialog.querySelector(".button-submit");
+          const cancel = dialog.querySelector(".button-cancel");
+          cancel.onclick = () => helper.close(dialog);
+          methods.onchange = () => {
+            const manual = form.elements.themeAddMethod.value === "youtube";
+            dialog.querySelector(".themeAddUrl").hidden = !manual;
+            url.disabled = !manual;
+            url.required = manual;
+          };
+          results.onchange = (event) => {
+            selectedItem = event.target.value;
+            selectedTitle = event.target.dataset.title;
+            submit.disabled =
+              adding ||
+              scanRunning ||
+              bulkBusy ||
+              downloaderFailed ||
+              !selectedItem;
+          };
+          const searchItems = async (revision, term) => {
+            try {
+              const items = await request(
+                "items?search=" + encodeURIComponent(term),
+              );
+              if (revision !== searchRevision || !dialog.isConnected) return;
+              for (const result of items) {
+                const card = document.createElement("label");
+                card.className = "themeChoice";
+                const radio = document.createElement("input");
+                radio.type = "radio";
+                radio.name = "themeAddItem";
+                radio.value = result.ItemId;
+                radio.dataset.title = result.Name;
+                radio.required = true;
+                radio.setAttribute(
+                  "aria-label",
+                  result.Name +
+                    ". " +
+                    t("kind" + result.Kind) +
+                    ". " +
+                    result.Library +
+                    (result.Year ? ", " + result.Year : ""),
+                );
+                const text = document.createElement("span");
+                const title = document.createElement("strong");
+                title.textContent = result.Name;
+                const details = document.createElement("span");
+                details.className = "themeChoiceDetails themeLibraryMetadata";
+                const libraryName = document.createElement("span");
+                libraryName.textContent =
+                  result.Library + (result.Year ? " · " + result.Year : "");
+                details.append(kindIcon(result.Kind), libraryName);
+                text.append(title, details);
+                card.append(radio, text);
+                results.append(card);
+              }
+              searchStatus.hidden = items.length > 0;
+              searchStatus.textContent = items.length ? "" : t("noItemsFound");
+              announcements.textContent = items.length
+                ? t(
+                    items.length === 1 ? "resultFound" : "resultsFound",
+                    items.length,
+                  )
+                : t("noItemsFound");
+            } catch (error) {
+              if (revision === searchRevision) {
+                searchStatus.textContent = userError(error);
+                announcements.textContent = userError(error);
+              }
+            } finally {
+              if (revision === searchRevision)
+                itemsField.setAttribute("aria-busy", "false");
+            }
+          };
+          searchInput.oninput = () => {
+            clearTimeout(searchTimer);
+            const revision = ++searchRevision;
+            const term = searchInput.value.trim();
+            searchClear.hidden = !searchInput.value;
+            selectedItem = null;
+            selectedTitle = "";
+            submit.disabled = true;
+            results.replaceChildren();
+            announcements.textContent = "";
+            const searching = term.length >= 2;
+            itemsField.hidden = !searching;
+            searchStatus.hidden = false;
+            itemsField.setAttribute("aria-busy", String(searching));
+            searchStatus.textContent = searching ? t("stageSearching") : "";
+            if (searching)
+              searchTimer = setTimeout(() => searchItems(revision, term), 250);
+          };
+          searchClear.onclick = () => {
+            searchInput.value = "";
+            searchInput.dispatchEvent(new Event("input"));
+            searchInput.focus();
+          };
+          dialog.addEventListener("closing", () => {
+            clearTimeout(searchTimer);
+            searchRevision++;
+          });
+          dialog.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              helper.close(dialog);
+              return;
+            }
+            if (event.key !== "Tab") return;
+            const controls = [
+              ...dialog.querySelectorAll("input, button"),
+            ].filter(
+              (control) => !control.disabled && control.getClientRects().length,
+            );
+            const first = controls[0];
+            const last = controls.at(-1);
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first?.focus();
+            }
+          });
+          form.onsubmit = async (event) => {
+            event.preventDefault();
+            if (bulkBusy || scanRunning || !selectedItem) return;
+            if (adding) return;
+            adding = true;
+            form.setAttribute("aria-busy", "true");
+            const title = selectedTitle;
+            submit.disabled = true;
+            status.textContent = t("queueingTheme");
+            try {
+              await request(selectedItem + "/add", {
+                method: "POST",
+                body: JSON.stringify({
+                  YouTubeUrl:
+                    form.elements.themeAddMethod.value === "youtube"
+                      ? url.value.trim()
+                      : null,
+                }),
+              });
+              await helper.close(dialog);
+              toast(t("itemQueued", title));
+              current = 1;
+              $("#themeSearch").value = "";
+              $("#themeSearchClear").hidden = true;
+              await load(rows);
+            } catch (error) {
+              status.textContent = userError(error);
+            } finally {
+              adding = false;
+              form.setAttribute("aria-busy", "false");
+              submit.disabled =
+                scanRunning || bulkBusy || downloaderFailed || !selectedItem;
+            }
+          };
+          localize(dialog);
+          await helper.open(dialog);
+        } finally {
+          dialog?.remove();
+          confirming = false;
+          if (visible && page.isConnected && !$("#themeOverview").hidden) {
+            if ($("#themeAdd").disabled) focusRow(null);
+            else {
+              $("#themeBulkMenu").open = true;
+              $("#themeAdd").focus({ preventScroll: true });
+            }
+          }
+        }
+      };
+      $("#themeAdd").onclick = () => {
+        $("#themeBulkMenu").open = false;
+        addTheme().catch(showError);
       };
       const editSource = async (item) => {
         if (confirming) return null;
@@ -1812,12 +2242,17 @@
               </div>
             </div>`;
           dialog.querySelector("h3").textContent = t("editThemeFor", item.Name);
-          dialog.querySelector(".fieldDescription").textContent =
-            t("editThemeHelp");
+          dialog.querySelector(".fieldDescription").textContent = item.Pending
+            ? t("pasteYouTubeLink")
+            : t("editThemeHelp");
           const input = dialog.querySelector("input");
-          dialog.querySelector("label").textContent = t("youTubeUrl");
+          dialog.querySelector("label").textContent = item.Pending
+            ? t("youTubeLink")
+            : t("youTubeUrl");
           input.value = item.YouTubeUrl || "";
-          dialog.querySelector(".button-submit").textContent = t("confirmEdit");
+          dialog.querySelector(".button-submit").textContent = item.Pending
+            ? t("addTheme")
+            : t("confirmEdit");
           const cancel = dialog.querySelector(".button-cancel");
           cancel.textContent = t("cancel");
           cancel.onclick = () => dialogHelper.close(dialog);
@@ -1825,6 +2260,7 @@
           input.oninput = () => input.setCustomValidity("");
           dialog.querySelector("form").onsubmit = (event) => {
             event.preventDefault();
+            if (scanRunning || bulkBusy || downloaderFailed) return;
             const url = new URL(input.value.trim());
             let id = null;
             if (url.hostname === "youtu.be") id = url.pathname.slice(1);
@@ -2129,6 +2565,36 @@
         $("#themeSettingsLoading").hidden = true;
         updateSave();
       }
+      const queueProcessing = async (item, youtubeUrl = null) => {
+        if (
+          scanRunning ||
+          bulkBusy ||
+          downloaderFailed ||
+          item.Processing ||
+          refreshingItems.has(item.ItemId)
+        )
+          return;
+        refreshingItems.add(item.ItemId);
+        refreshErrors.delete(item.ItemId);
+        updateRowActions();
+        let action = "refresh";
+        if (item.Pending) action = "add";
+        else if (youtubeUrl) action = "edit";
+        try {
+          await request(item.ItemId + "/" + action, {
+            method: "POST",
+            ...(item.Pending || youtubeUrl
+              ? { body: JSON.stringify({ YouTubeUrl: youtubeUrl }) }
+              : {}),
+          });
+          toast(t("itemQueued", item.Name));
+        } catch (error) {
+          refreshErrors.set(item.ItemId, userError(error));
+        } finally {
+          refreshingItems.delete(item.ItemId);
+          await load(rows);
+        }
+      };
       async function rows() {
         const requestId = ++rowsRequest;
         const requestedPage = current;
@@ -2148,6 +2614,8 @@
           return;
         total = data.Total;
         allTotal = data.AllTotal;
+        managedTotal = data.ManagedTotal ?? allTotal;
+        addsProcessing = data.Processing ?? false;
         $("#themeDownloads").setAttribute("aria-busy", "false");
         $("#themeDownloadsLoading").hidden = true;
         $("#themeDownloadCount").textContent = allTotal.toLocaleString();
@@ -2160,6 +2628,18 @@
           current--;
           return rows();
         }
+        const rowsKey = JSON.stringify([
+          requestedPage,
+          search,
+          data.Items,
+          [...refreshingItems],
+          [...refreshErrors],
+        ]);
+        if (renderedRowsKey === rowsKey) {
+          updateRowActions();
+          return;
+        }
+        renderedRowsKey = rowsKey;
         const container = $("#themeRows");
         const focusedItem =
           document.activeElement?.closest("#themeRows tr")?.dataset.itemId;
@@ -2198,21 +2678,24 @@
           const status = document.createElement("div");
           const metadata = document.createElement("div");
           metadata.className = "fieldDescription themeLibraryMetadata";
-          const libraryIcon = icon(
-            {
-              Movie: "movie",
-              Series: "tv",
-              Collection: "collections_bookmark",
-            }[item.Kind] || "folder",
-          );
-          libraryIcon.title = t("kind" + item.Kind);
           metadata.append(
-            libraryIcon,
+            kindIcon(item.Kind),
             document.createTextNode(item.Library || ""),
           );
           status.className = "fieldDescription";
-          status.hidden = item.Status === "Active";
-          status.textContent = status.hidden ? "" : t("modified");
+          status.hidden =
+            (item.Status === "Active" && !item.Result) ||
+            item.Pending ||
+            item.Processing;
+          if (item.Result) {
+            const resultKey =
+              {
+                Replaced: "replaced",
+                "No replacement found": "noReplacement",
+                "Already themed": "alreadyThemed",
+              }[item.Result] || "requestFailed";
+            status.textContent = t(resultKey);
+          } else status.textContent = status.hidden ? "" : t("modified");
           const date = new Date(item.Date);
           const shortDate = date.toLocaleString(undefined, {
             month: "short",
@@ -2238,6 +2721,10 @@
             errorText.textContent = refreshErrors.get(item.ItemId);
             error.hidden = false;
           }
+          if (item.Code) {
+            errorText.textContent = t(item.Code);
+            error.hidden = false;
+          }
           const showRowError = (e) => {
             if (!silent(e)) {
               errorText.textContent = userError(e);
@@ -2252,11 +2739,18 @@
           if (refreshingItems.has(item.ItemId)) {
             row.dataset.busy = "true";
             busy.hidden = false;
-            busyText.textContent = t(
-              activeRefreshItem === item.ItemId ? "refreshing" : "queued",
-            );
+            busyText.textContent = t("queued");
+          }
+          if (item.Processing) {
+            row.dataset.busy = "true";
+            busy.hidden = false;
+            if (item.Stage === "queued") busyText.textContent = t("queued");
+            else if (item.Stage === "stagePreparing" && !item.Pending)
+              busyText.textContent = t("refreshing");
+            else busyText.textContent = t(item.Stage);
           }
           const setBusy = (text) => {
+            renderedRowsKey = "";
             row.dataset.busy = String(Boolean(text));
             busy.hidden = !text;
             busyText.textContent = text;
@@ -2270,10 +2764,65 @@
           added.append(addedDate);
           const actions = document.createElement("td");
           actions.className = "detailTableBodyCell";
+          if (item.Pending) {
+            if (!item.Processing) {
+              const retry = document.createElement("button", "emby-button");
+              retry.className = "emby-button";
+              retry.dataset.themeAction = t("tryAgain");
+              retry.dataset.requiresDownloader = "true";
+              retry.append(icon("refresh"));
+              retry.onclick = async () => {
+                setBusy(t("queued"));
+                await queueProcessing(item, item.YouTubeUrl);
+              };
+              const chooseSource = document.createElement(
+                "button",
+                "emby-button",
+              );
+              chooseSource.className = "emby-button";
+              chooseSource.dataset.themeAction = t("youTubeLink");
+              chooseSource.dataset.requiresDownloader = "true";
+              chooseSource.append(icon("edit"));
+              chooseSource.onclick = async () => {
+                try {
+                  const youtubeUrl = await editSource(item);
+                  if (!youtubeUrl) return;
+                  setBusy(t("queued"));
+                  await queueProcessing(item, youtubeUrl);
+                } catch (e) {
+                  setBusy("");
+                  showRowError(e);
+                }
+              };
+              const dismiss = document.createElement("button", "emby-button");
+              dismiss.className = "emby-button";
+              dismiss.dataset.themeAction = t("removeFromList");
+              dismiss.append(icon("close"));
+              dismiss.onclick = async () => {
+                if (scanRunning || bulkBusy || row.dataset.busy === "true")
+                  return;
+                setBusy(t("removing"));
+                try {
+                  await request(item.ItemId + "/pending", { method: "DELETE" });
+                  refreshErrors.delete(item.ItemId);
+                  await load(rows);
+                  focusRow(null);
+                } catch (e) {
+                  setBusy("");
+                  showRowError(e);
+                }
+              };
+              actions.append(actionMenu(item, [retry, chooseSource, dismiss]));
+            }
+            row.append(theme, added, actions);
+            fragment.append(row);
+            continue;
+          }
           const play = document.createElement("button", "emby-button");
           play.className = "emby-button";
           play.setAttribute("aria-label", t("playThemeFor", item.Name));
           play.dataset.themeAction = t("playTheme");
+          play.dataset.readOnly = "true";
           play.append(icon("play_arrow"));
           play.onclick = () => playTheme(item).catch(showRowError);
           const refresh = document.createElement("button", "emby-button");
@@ -2292,46 +2841,9 @@
               refreshingItems.has(item.ItemId)
             )
               return;
-            refreshingItems.add(item.ItemId);
-            refreshErrors.delete(item.ItemId);
-            setBusy(t(refreshingItems.size === 1 ? "refreshing" : "queued"));
+            setBusy(t("queued"));
             error.hidden = true;
-            const run = async () => {
-              activeRefreshItem = item.ItemId;
-              setBusy(t("refreshing"));
-              try {
-                const result = (
-                  await request(
-                    item.ItemId + (youtubeUrl ? "/edit" : "/refresh"),
-                    {
-                      method: "POST",
-                      ...(youtubeUrl
-                        ? { body: JSON.stringify({ YouTubeUrl: youtubeUrl }) }
-                        : {}),
-                    },
-                  )
-                ).Result;
-                const message = t(
-                  {
-                    Replaced: "replaced",
-                    "No replacement found": "noReplacement",
-                    "Already themed": "alreadyThemed",
-                  }[result] || "requestFailed",
-                );
-                toast(message);
-              } catch (e) {
-                const message = userError(e);
-                refreshErrors.set(item.ItemId, message);
-                errorText.textContent = message;
-                error.hidden = false;
-              } finally {
-                activeRefreshItem = null;
-                refreshingItems.delete(item.ItemId);
-                setBusy("");
-                await load(rows);
-              }
-            };
-            refreshQueue = refreshQueue.then(run, run);
+            queueProcessing(item, youtubeUrl).catch(showRowError);
           };
           refresh.onclick = () => queueReprocessing();
           const edit = document.createElement("button", "emby-button");
@@ -2393,29 +2905,7 @@
               setBusy("");
             }
           };
-          const menu = document.createElement("details");
-          menu.className = "themeMenu";
-          const toggle = document.createElement("summary");
-          toggle.setAttribute("aria-label", t("actionsFor", item.Name));
-          toggle.title = t("actionsFor", item.Name);
-          toggle.append(icon("more_vert"));
-          const menuItems = document.createElement("div");
-          menuItems.className = "themeMenuItems";
-          for (const button of [play, refresh, edit, remove]) {
-            const label = document.createElement("span");
-            label.textContent = button.dataset.themeAction;
-            button.append(label);
-            button.addEventListener("click", () => {
-              menu.open = false;
-              toggle.focus();
-            });
-            menuItems.append(button);
-          }
-          menu.append(toggle, menuItems);
-          const rowActions = document.createElement("div");
-          rowActions.className = "themeRowActions";
-          rowActions.append(menu);
-          actions.append(rowActions);
+          actions.append(actionMenu(item, [play, refresh, edit, remove]));
           row.append(theme, added, actions);
           fragment.append(row);
         }
@@ -2640,7 +3130,10 @@
           () => !strings,
         );
         page.timer = setInterval(() => {
-          if (strings) poll();
+          if (strings) {
+            poll();
+            load(rows);
+          }
         }, 3000);
       });
       page.addEventListener("pagehide", () => {
@@ -2738,10 +3231,24 @@
       };
       $("#themeDeleteAll").onclick = async () => {
         $("#themeBulkMenu").open = false;
-        if (!visible || scanRunning || bulkBusy || !allTotal) return;
+        if (
+          !visible ||
+          scanRunning ||
+          bulkBusy ||
+          addsProcessing ||
+          !managedTotal
+        )
+          return;
         if (!(await confirmDelete(t("confirmDeleteAll"), t("deleteAll"))))
           return;
-        if (!visible || scanRunning || bulkBusy || !allTotal) return;
+        if (
+          !visible ||
+          scanRunning ||
+          bulkBusy ||
+          addsProcessing ||
+          !managedTotal
+        )
+          return;
         bulkBusy = true;
         updateRowActions();
         try {
