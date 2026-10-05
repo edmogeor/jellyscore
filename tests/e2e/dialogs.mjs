@@ -1,6 +1,7 @@
 // Run against `make up` with Playwright available through NODE_PATH.
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync, readdirSync } from "node:fs";
 
 const { chromium } = createRequire(import.meta.url)("playwright");
 const base = process.env.PREVIEW_URL || "http://127.0.0.1:18096";
@@ -1459,6 +1460,133 @@ try {
     () => document.querySelectorAll("#themeRows tr").length === 2,
   );
   assert.deepEqual(dismissedAdds, [available[0].ItemId]);
+  // Give each fresh page the resolved locale that the plugin reads from Jellyfin.
+  await page.addInitScript(() => {
+    Object.defineProperty(HTMLHtmlElement.prototype, "lang", {
+      configurable: true,
+      get() {
+        return (
+          sessionStorage.getItem("jellyScoreTestLocale") ||
+          this.getAttribute("lang")
+        );
+      },
+      set(value) {
+        this.setAttribute("lang", value);
+      },
+    });
+  });
+  const localeDirectory = new URL(
+    "../../Jellyfin.Plugin.JellyScore/Strings/",
+    import.meta.url,
+  );
+  for (const file of readdirSync(localeDirectory).filter((file) =>
+    file.endsWith(".json"),
+  )) {
+    const locale = file.replace(/\.json$/, "");
+    const dictionary = JSON.parse(
+      readFileSync(new URL(file, localeDirectory), "utf8"),
+    );
+    queuedAdds.length = 0;
+    await page.evaluate((locale) => {
+      sessionStorage.setItem("jellyScoreTestLocale", locale);
+    }, locale);
+    await page.reload();
+    await page.waitForFunction(
+      (label) =>
+        document.querySelector("#themeAdd span[data-i18n]")?.textContent ===
+        label,
+      dictionary.addTheme,
+    );
+    await page.evaluate(() => {
+      window.jellyScoreToasts = [];
+      const alert = Dashboard.alert;
+      Dashboard.alert = (text) => {
+        window.jellyScoreToasts.push(text);
+        return alert(text);
+      };
+    });
+    await page.locator("#themeBulkMenu summary").click();
+    await page.locator("#themeAdd").click();
+    const dialog = page.locator("#themeSongsAdd");
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(
+      await dialog.locator("h3").textContent(),
+      dictionary.addTheme,
+      locale + ": modal title",
+    );
+    assert.equal(
+      await dialog.locator(".fieldDescription").first().textContent(),
+      dictionary.addThemeHelp,
+      locale + ": modal help",
+    );
+    const search = dialog.getByLabel(dictionary.searchLibrary);
+    await search.fill("No match");
+    await page.waitForFunction(
+      (label) =>
+        document.querySelector(".themeAddSearchStatus")?.textContent === label,
+      dictionary.noItemsFound,
+    );
+    await search.fill("Unthemed");
+    await page.waitForFunction(
+      (label) =>
+        document.querySelector(".themeAddAnnouncements")?.textContent === label,
+      dictionary.resultsFound.replace("{0}", "3"),
+    );
+    assert.equal(
+      await dialog
+        .getByRole("radio", { name: dictionary.youTubeLink, exact: true })
+        .count(),
+      1,
+      locale + ": source option",
+    );
+    await dialog.locator(".themeAddResults input").first().check();
+    await dialog
+      .getByRole("button", { name: dictionary.addTheme, exact: true })
+      .click();
+    await dialog.waitFor({ state: "detached" });
+    await page.waitForFunction(
+      (label) => window.jellyScoreToasts.includes(label),
+      dictionary.itemQueued.replace("{0}", available[0].Name),
+    );
+    const row = page.locator("#themeRows tr").first();
+    await row.waitFor({ state: "visible" });
+    assert.equal(
+      await row.locator(".themeRowBusy").textContent(),
+      "sync" + dictionary.queued,
+      locale + ": queued status",
+    );
+    queuedAdds[0].Processing = false;
+    queuedAdds[0].Code = "searchFailed";
+    queuedAdds[0].Stage = "Failed";
+    await row.locator("summary").waitFor({ state: "visible" });
+    await row.locator("summary").click();
+    assert.equal(
+      await row
+        .getByRole("button", { name: dictionary.tryAgain, exact: true })
+        .count(),
+      1,
+      locale + ": retry action",
+    );
+    await row
+      .getByRole("button", { name: dictionary.youTubeLink, exact: true })
+      .click();
+    const source = page.locator("#themeSongsEdit");
+    await source.waitFor({ state: "visible" });
+    assert.equal(
+      await source.locator(".fieldDescription").textContent(),
+      dictionary.pasteYouTubeLink,
+      locale + ": source help",
+    );
+    await source
+      .getByRole("button", { name: dictionary.cancel, exact: true })
+      .click();
+    await source.waitFor({ state: "detached" });
+    await row.locator("summary").click();
+    await row
+      .getByRole("button", { name: dictionary.removeFromList, exact: true })
+      .click();
+    await page.locator("#themeEmpty").waitFor({ state: "visible" });
+  }
   assert.deepEqual(errors, [], "the add modal has no browser errors");
   await page.unrouteAll({ behavior: "wait" });
   console.log(

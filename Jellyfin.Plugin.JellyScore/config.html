@@ -1476,7 +1476,7 @@
             <div class="themeMenuItems">
               <button is="emby-button" id="themeAdd" class="emby-button">
                 <span class="material-icons" aria-hidden="true">add</span>
-                <span>Add theme</span>
+                <span data-i18n="addTheme">{{addTheme}}</span>
               </button>
               <button
                 is="emby-button"
@@ -1729,12 +1729,12 @@
         actions.append(menu);
         return actions;
       };
-      const localize = () => {
-        page.querySelectorAll("[data-i18n]").forEach((el) => {
+      const localize = (root = page) => {
+        root.querySelectorAll("[data-i18n]").forEach((el) => {
           el.textContent = t(el.dataset.i18n);
         });
         for (const attribute of ["placeholder", "aria-label", "title"]) {
-          page
+          root
             .querySelectorAll("[data-i18n-" + attribute + "]")
             .forEach((el) => {
               el.setAttribute(
@@ -1896,7 +1896,7 @@
             ? t("working")
             : downloaderFailed
               ? t(downloaderFailureCode)
-              : "Add theme";
+              : t("addTheme");
         removeAll.disabled =
           scanRunning || bulkBusy || addsProcessing || managedTotal === 0;
         removeAll.title = scanRunning
@@ -1985,35 +1985,35 @@
           dialog.setAttribute("aria-modal", "true");
           dialog.setAttribute("aria-labelledby", "themeSongsAddTitle");
           dialog.innerHTML = `
-            <div class="formDialogHeader"><h3 id="themeSongsAddTitle" class="formDialogHeaderTitle">Add theme</h3></div>
+            <div class="formDialogHeader"><h3 id="themeSongsAddTitle" class="formDialogHeaderTitle" data-i18n="addTheme"></h3></div>
             <div class="formDialogContent smoothScrollY"><div class="dialogContentInner dialogContentInner-mini">
-              <p class="fieldDescription">Find a movie, TV show or collection.</p>
+              <p class="fieldDescription" data-i18n="addThemeHelp"></p>
               <div class="themeItemSearch">
                 <div class="inputContainer"><div class="themeMaterialField themeSearch">
                   <span class="material-icons" aria-hidden="true">search</span>
-                  <label for="themeAddSearch">Search your library</label>
+                  <label for="themeAddSearch" data-i18n="searchLibrary"></label>
                   <input id="themeAddSearch" type="search" placeholder=" " aria-controls="themeAddResults" />
-                  <button is="emby-button" id="themeAddSearchClear" type="button" aria-label="Clear search" title="Clear search" hidden><span class="material-icons" aria-hidden="true">close</span></button>
+                  <button is="emby-button" id="themeAddSearchClear" type="button" data-i18n-aria-label="clearSearch" data-i18n-title="clearSearch" hidden><span class="material-icons" aria-hidden="true">close</span></button>
                 </div></div>
               </div>
               <p class="themeAddAnnouncements" role="status" aria-live="polite" aria-atomic="true"></p>
               <form class="themeAddForm">
-                <fieldset class="themeAddItems" hidden><legend>Choose a title</legend>
+                <fieldset class="themeAddItems" hidden><legend data-i18n="chooseTitle"></legend>
                   <p class="themeAddSearchStatus fieldDescription"></p>
                   <div id="themeAddResults" class="themeAddResults"></div>
                 </fieldset>
-                <fieldset><legend>Theme source</legend><div class="themeSourceChoices">
-                  <label class="themeChoice"><input type="radio" name="themeAddMethod" value="automatic" checked /><span>Find automatically</span></label>
-                  <label class="themeChoice"><input type="radio" name="themeAddMethod" value="youtube" /><span>YouTube link</span></label>
+                <fieldset><legend data-i18n="themeSource"></legend><div class="themeSourceChoices">
+                  <label class="themeChoice"><input type="radio" name="themeAddMethod" value="automatic" checked /><span data-i18n="findAutomatically"></span></label>
+                  <label class="themeChoice"><input type="radio" name="themeAddMethod" value="youtube" /><span data-i18n="youTubeLink"></span></label>
                 </div></fieldset>
                 <div class="inputContainer themeAddUrl" hidden><div class="themeMaterialField">
-                  <label for="themeAddUrl">YouTube link</label>
+                  <label for="themeAddUrl" data-i18n="youTubeLink"></label>
                   <input id="themeAddUrl" type="url" disabled placeholder="https://www.youtube.com/watch?v=…" />
                 </div></div>
                 <p class="themeAddStatus fieldDescription" role="status" aria-live="polite"></p>
                 <div class="formDialogFooter">
-                  <button is="emby-button" type="button" class="raised button-cancel block formDialogFooterItem">Cancel</button>
-                  <button is="emby-button" type="submit" class="raised button-submit block formDialogFooterItem" disabled>Add theme</button>
+                  <button is="emby-button" type="button" class="raised button-cancel block formDialogFooterItem" data-i18n="cancel"></button>
+                  <button is="emby-button" type="submit" class="raised button-submit block formDialogFooterItem" data-i18n="addTheme" disabled></button>
                 </div>
               </form>
             </div></div>`;
@@ -2089,13 +2089,13 @@
                 results.append(card);
               }
               searchStatus.hidden = items.length > 0;
-              searchStatus.textContent = items.length
-                ? ""
-                : "No results found.";
+              searchStatus.textContent = items.length ? "" : t("noItemsFound");
               announcements.textContent = items.length
-                ? items.length +
-                  (items.length === 1 ? " result found." : " results found.")
-                : "No results found.";
+                ? t(
+                    items.length === 1 ? "resultFound" : "resultsFound",
+                    items.length,
+                  )
+                : t("noItemsFound");
             } catch (error) {
               if (revision === searchRevision) {
                 searchStatus.textContent = userError(error);
@@ -2120,7 +2120,7 @@
             itemsField.hidden = !searching;
             searchStatus.hidden = false;
             itemsField.setAttribute("aria-busy", String(searching));
-            searchStatus.textContent = searching ? "Searching…" : "";
+            searchStatus.textContent = searching ? t("stageSearching") : "";
             if (searching)
               searchTimer = setTimeout(() => searchItems(revision, term), 250);
           };
@@ -2164,7 +2164,7 @@
             form.setAttribute("aria-busy", "true");
             const title = selectedTitle;
             submit.disabled = true;
-            status.textContent = "Adding to queue…";
+            status.textContent = t("queueingTheme");
             try {
               await request(selectedItem + "/add", {
                 method: "POST",
@@ -2176,7 +2176,7 @@
                 }),
               });
               await helper.close(dialog);
-              toast(title + " added to queue.");
+              toast(t("itemQueued", title));
               current = 1;
               $("#themeSearch").value = "";
               $("#themeSearchClear").hidden = true;
@@ -2190,6 +2190,7 @@
                 scanRunning || bulkBusy || downloaderFailed || !selectedItem;
             }
           };
+          localize(dialog);
           await helper.open(dialog);
         } finally {
           dialog?.remove();
@@ -2245,15 +2246,15 @@
             </div>`;
           dialog.querySelector("h3").textContent = t("editThemeFor", item.Name);
           dialog.querySelector(".fieldDescription").textContent = item.Pending
-            ? "Paste a YouTube link."
+            ? t("pasteYouTubeLink")
             : t("editThemeHelp");
           const input = dialog.querySelector("input");
           dialog.querySelector("label").textContent = item.Pending
-            ? "YouTube link"
+            ? t("youTubeLink")
             : t("youTubeUrl");
           input.value = item.YouTubeUrl || "";
           dialog.querySelector(".button-submit").textContent = item.Pending
-            ? "Add theme"
+            ? t("addTheme")
             : t("confirmEdit");
           const cancel = dialog.querySelector(".button-cancel");
           cancel.textContent = t("cancel");
@@ -2590,7 +2591,7 @@
                 : {}),
             },
           );
-          toast(item.Name + " added to queue.");
+          toast(t("itemQueued", item.Name));
         } catch (error) {
           refreshErrors.set(item.ItemId, userError(error));
         } finally {
@@ -2744,14 +2745,14 @@
           if (refreshingItems.has(item.ItemId)) {
             row.dataset.busy = "true";
             busy.hidden = false;
-            busyText.textContent = "Queued…";
+            busyText.textContent = t("queued");
           }
           if (item.Processing) {
             row.dataset.busy = "true";
             busy.hidden = false;
             busyText.textContent =
               item.Stage === "queued"
-                ? "Queued…"
+                ? t("queued")
                 : item.Stage === "stagePreparing" && !item.Pending
                   ? t("refreshing")
                   : t(item.Stage);
@@ -2775,7 +2776,7 @@
             if (!item.Processing) {
               const retry = document.createElement("button", "emby-button");
               retry.className = "emby-button";
-              retry.dataset.themeAction = "Try again";
+              retry.dataset.themeAction = t("tryAgain");
               retry.dataset.requiresDownloader = "true";
               retry.append(icon("refresh"));
               retry.onclick = async () => {
@@ -2787,7 +2788,7 @@
                 "emby-button",
               );
               chooseSource.className = "emby-button";
-              chooseSource.dataset.themeAction = "YouTube link";
+              chooseSource.dataset.themeAction = t("youTubeLink");
               chooseSource.dataset.requiresDownloader = "true";
               chooseSource.append(icon("edit"));
               chooseSource.onclick = async () => {
@@ -2803,12 +2804,12 @@
               };
               const dismiss = document.createElement("button", "emby-button");
               dismiss.className = "emby-button";
-              dismiss.dataset.themeAction = "Remove from list";
+              dismiss.dataset.themeAction = t("removeFromList");
               dismiss.append(icon("close"));
               dismiss.onclick = async () => {
                 if (scanRunning || bulkBusy || row.dataset.busy === "true")
                   return;
-                setBusy("Removing…");
+                setBusy(t("removing"));
                 try {
                   await request(item.ItemId + "/pending", { method: "DELETE" });
                   refreshErrors.delete(item.ItemId);
@@ -2848,7 +2849,7 @@
               refreshingItems.has(item.ItemId)
             )
               return;
-            setBusy("Queued…");
+            setBusy(t("queued"));
             error.hidden = true;
             queueProcessing(item, youtubeUrl).catch(showRowError);
           };
