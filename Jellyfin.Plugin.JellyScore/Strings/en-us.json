@@ -89,7 +89,7 @@
   "editThemeFor": "Edit YouTube source for {0}",
   "youTubeUrl": "YouTube URL",
   "editThemeHelp": "Downloads and processes this video. Your current theme stays in place if replacement fails.",
-  "confirmEdit": "Replace theme",
+  "confirmEdit": "Replace",
   "cancel": "Cancel",
   "invalidYouTubeUrl": "Enter a YouTube video URL.",
   "refreshing": "Refreshing…",

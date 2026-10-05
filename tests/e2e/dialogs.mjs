@@ -604,7 +604,7 @@ try {
   );
   await input.fill("https://example.com/theme.mp3");
   await dialog
-    .getByRole("button", { name: "Replace theme", exact: true })
+    .getByRole("button", { name: "Replace", exact: true })
     .click();
   assert.equal(
     await input.evaluate((element) => element.validity.valid),
@@ -613,7 +613,7 @@ try {
   assert.equal(edits.length, 0, "custom URLs cannot queue reprocessing");
   await input.fill("https://youtu.be/bbbbbbbbbbb");
   await dialog
-    .getByRole("button", { name: "Replace theme", exact: true })
+    .getByRole("button", { name: "Replace", exact: true })
     .click();
   await page.waitForResponse(/\/ThemeSongs\/[^/]+\/edit$/);
   await dialog.waitFor({ state: "detached" });
