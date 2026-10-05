@@ -21,6 +21,7 @@ public sealed class ManagedTheme
     public int Score { get; init; }
     public string Evidence { get; init; } = "";
     public DateTimeOffset Date { get; init; }
+    public DateTimeOffset? AddedAt { get; init; }
 }
 
 public sealed class Store

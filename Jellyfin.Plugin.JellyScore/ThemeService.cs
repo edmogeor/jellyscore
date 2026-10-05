@@ -27,7 +27,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
 
     public IReadOnlyList<ManagedTheme> List()
     {
-        var rows = store.Read(s => s.Themes.Values.OrderByDescending(t => t.Date).ToArray());
+        var rows = store.Read(s => s.Themes.Values.OrderByDescending(t => t.AddedAt ?? t.Date).ToArray());
         var stale = new List<(ManagedTheme Theme, bool MissingItem)>();
         foreach (var record in rows)
         {
@@ -252,12 +252,14 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 // Complete ownership recording after the file is in place, even if cancellation arrives.
                 var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, CancellationToken.None));
                 var result = replacement ? "Replaced" : "Added";
+                var date = DateTimeOffset.UtcNow;
                 store.Change(s =>
                 {
                     s.Themes[id] = new ManagedTheme { ItemId = id, Folder = folder, Path = path, LibraryId = libraryId, Library = libraryName,
                         Kind = item is Movie ? "Movie" : item is BoxSet ? "Collection" : "Series", Name = item.Name, Year = item.ProductionYear,
                         VideoId = source.Video.Id, VideoTitle = source.Video.Title, Recording = source.Recording, SourceUrl = sourceUrl,
-                        Hash = hash, Score = source.Score, Evidence = source.Evidence, Date = DateTimeOffset.UtcNow };
+                        Hash = hash, Score = source.Score, Evidence = source.Evidence, Date = date,
+                        AddedAt = existing?.AddedAt ?? existing?.Date ?? date };
                     s.Outcomes[id] = result;
                 });
                 Refresh(item);

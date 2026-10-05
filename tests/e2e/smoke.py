@@ -4,6 +4,7 @@ import os
 import subprocess
 import time
 import uuid
+from datetime import datetime
 from setup import request, wizard, libraries
 
 PLUGIN = "129e8a8b-87f1-48d3-802b-7dd151d72920"
@@ -326,17 +327,27 @@ assert status == 204, f"retry endpoint should reuse the verified download: {stat
 status, songs = request("GET", f"/Items/{movie['Id']}/ThemeSongs", token=token)
 assert status == 200 and songs.get("TotalRecordCount", 0) > 0, f"Jellyfin cannot see downloaded theme: {status} {songs}"
 scan_until(token, "alreadyThemed")
+status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+assert status == 200, f"list before refresh: {status}"
+original_order = [field(item, "itemId") for item in field(downloads, "items")]
+original_date = field(next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"])), "date")
 status, refreshed = request("POST", f"/ThemeSongs/{movie['Id']}/refresh", token=token, timeout=300)
 assert status == 200 and field(refreshed, "result") in ("Replaced", "No replacement found"), f"refresh theme: {status} {refreshed}"
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 theme = next((item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"])), None)
 assert status == 200 and theme is not None, f"refresh lost managed theme: {downloads}"
 assert field(theme, "status") == "Active", downloads
+assert [field(item, "itemId") for item in field(downloads, "items")] == original_order, "refresh changed table order"
+if field(refreshed, "result") == "Replaced":
+    assert datetime.fromisoformat(field(theme, "date")) > datetime.fromisoformat(original_date), "replacement did not update its displayed date"
+refreshed_date = field(theme, "date")
 status, edited = request("POST", f"/ThemeSongs/{movie['Id']}/edit", {"youTubeUrl": original_source}, token=token, timeout=300)
 assert status == 200 and field(edited, "result") == "Replaced", f"reprocess explicitly selected, previously excluded source: {status} {edited}"
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
 theme = next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(movie["Id"]))
 assert field(theme, "source") == original_source and field(theme, "status") == "Active", f"edited source not installed: {theme}"
+assert [field(item, "itemId") for item in field(downloads, "items")] == original_order, "editing the source changed table order"
+assert datetime.fromisoformat(field(theme, "date")) > datetime.fromisoformat(refreshed_date), "editing the source did not update its displayed date"
 status, _ = request("DELETE", f"/ThemeSongs/{movie['Id']}", token=token)
 assert status == 204, f"delete managed theme: {status}"
 status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
