@@ -357,8 +357,9 @@ check(YouTube.DownloaderName(false, false, Architecture.X64) == "yt-dlp_linux", 
 check(YouTube.DownloaderName(false, false, Architecture.Arm64, true) == "yt-dlp_musllinux_aarch64", "Alpine arm64 binary");
 check(YouTube.DownloaderName(true, false, Architecture.Arm64) == "yt-dlp_arm64.exe", "Windows arm64 binary");
 check(YouTube.DownloaderName(false, true, Architecture.Arm64) == "yt-dlp_macos", "macOS universal binary");
-check(Audio.FixedGain(-30, -9, -26) == 4, "fixed gain brings a quiet track to the default target");
-check(Audio.FixedGain(-30, -1, -26) == -2, "true peak caps gain even when average loudness stays below target");
+const int defaultTarget = -30;
+check(Audio.FixedGain(-34, -9, defaultTarget) == 4, "fixed gain brings a quiet track to the default target");
+check(Audio.FixedGain(-34, -1, defaultTarget) == -2, "true peak caps gain even when average loudness stays below target");
 check(Audio.FixedGain(-30, -9, -20) == 6, "chosen volume changes gain while peak headroom still wins");
 var measured = Audio.Stats("Integrated loudness:\n    I:         -19.3 LUFS\n    Threshold: -29.5 LUFS\nTrue peak:\n    Peak:       -3.1 dBFS");
 check(measured.Loudness == -19.3 && Math.Abs(measured.TruePeak - -3.0) < 0.0001 &&
@@ -420,7 +421,7 @@ try
         var filter = Audio.Filter(0, 12, fadeIn, fadeOut);
         await Audio.Run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=12",
             "-af", filter, "-c:a", "pcm_s16le", source], CancellationToken.None);
-        await Audio.ConvertAudio(source, destination, "ffmpeg", 12, -26, CancellationToken.None);
+        await Audio.ConvertAudio(source, destination, "ffmpeg", 12, defaultTarget, CancellationToken.None);
         var before = await levels(source);
         var after = await levels(destination);
         check(before.Length >= 100 && after.Length >= 100, "FFmpeg produced measurable audio windows");

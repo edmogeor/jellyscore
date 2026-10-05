@@ -35,7 +35,7 @@
   "minimumMatchStrength": "Minimum match strength (0–100)",
   "matchStrengthHelp": "Default: 50. Higher values require stronger matching evidence. Changes apply to future searches.",
   "themeVolume": "Target loudness (LUFS)",
-  "themeVolumeHelp": "Default: −26 LUFS. More negative values are quieter. Changes apply to new and refreshed themes, not existing downloads.",
+  "themeVolumeHelp": "Default: −30 LUFS. More negative values are quieter. Changes apply to new and refreshed themes, not existing downloads.",
   "cookiesLabel": "YouTube cookies (optional)",
   "cookiesHelp": "Paste your cookies.txt contents. Using an account may put it at risk of suspension.",
   "cookiesGuide": "How to export YouTube cookies",

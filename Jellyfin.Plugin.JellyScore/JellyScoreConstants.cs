@@ -79,7 +79,7 @@ internal static class JellyScoreConstants
     internal const int RateLimitCooldownMinutes = 30;
     internal const string DownloaderMaximumFileSize = "30M";
 
-    internal const int DefaultTargetLufs = -26;
+    internal const int DefaultTargetLufs = -30;
     internal const int MinimumTargetLufs = -70;
     internal const int MaximumTargetLufs = -5;
     internal const double MaximumTruePeakDbtp = -3;

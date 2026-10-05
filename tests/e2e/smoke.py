@@ -14,7 +14,7 @@ def field(data, name):
     return data.get(name, data.get(name[0].upper() + name[1:]))
 
 
-def assert_settings(token, enabled, libraries, minimum=50, loudness=-26, scan_on_library_refresh=True):
+def assert_settings(token, enabled, libraries, minimum=50, loudness=-30, scan_on_library_refresh=True):
     for path in ("/ThemeSongs/settings", f"/Plugins/{PLUGIN}/Configuration"):
         status, settings = request("GET", path, token=token)
         assert status == 200, f"read settings {path}: {status}"
@@ -98,14 +98,14 @@ assert config["Enabled"] is True, "automatic processing must default to on"
 assert config["ScanOnLibraryRefresh"] is True, "library-refresh scanning must default to on"
 assert config.get("Libraries") is None, "new installs must default to all libraries"
 assert config["MinimumMatchStrength"] == 50, "new installs default to match strength 50"
-assert config["TargetLufs"] == -26, "new installs default to quieter themes"
+assert config["TargetLufs"] == -30, "new installs default to quieter themes"
 assert config["PreferFranchiseThemes"] is False, "movie franchise preference defaults off"
 status, settings = request("GET", "/ThemeSongs/settings", token=token)
 assert status == 200, f"admin settings: {status}"
 assert settings.get("downloaderAvailable", settings.get("DownloaderAvailable")) is True, "downloader release metadata missing"
 assert field(settings, "downloaderError") is None and field(settings, "runtimeError") is None, "download tools have no initial error"
 assert field(settings, "minimumMatchStrength") == 50, "admin settings expose the effective match strength"
-assert field(settings, "targetLufs") == -26, "admin settings expose the effective loudness target"
+assert field(settings, "targetLufs") == -30, "admin settings expose the effective loudness target"
 assert field(settings, "scanOnLibraryRefresh") is True, "admin settings expose the default scan trigger"
 assert field(settings, "preferFranchiseThemes") is False, "admin settings expose the movie preference"
 assert field(settings, "youTubeCookies") is None, "cookies are optional by default"
