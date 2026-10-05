@@ -1551,6 +1551,7 @@
       let scanPollError = "";
       let visible = false;
       let strings;
+      let uiLocale = "en-us";
       const t = (key, ...values) =>
         (strings?.[key] ?? key).replace(
           /\{(\d+)\}/g,
@@ -1901,7 +1902,7 @@
             <div class="formDialogContent smoothScrollY"><div class="dialogContentInner dialogContentInner-mini">
               <p class="fieldDescription"></p>
               <div class="themeAudioArea" aria-busy="true">
-                <audio-player><audio-neutral-skin data-loading><audio preload="metadata"></audio></audio-neutral-skin></audio-player>
+                <media-i18n><audio-player><audio-neutral-skin data-loading><audio preload="metadata"></audio></audio-neutral-skin></audio-player></media-i18n>
               </div>
               <div class="formDialogFooter">
                 <a class="themeSourceLink" target="_blank" rel="noopener noreferrer"><span class="material-icons" aria-hidden="true">open_in_new</span><span></span></a>
@@ -1909,6 +1910,7 @@
               </div>
             </div></div>`;
           dialog.querySelector("h3").textContent = item.Name;
+          dialog.querySelector("media-i18n").setAttribute("lang", uiLocale);
           const description = dialog.querySelector(".fieldDescription");
           description.textContent = item.VideoTitle || "";
           description.hidden = !description.textContent;
@@ -2043,6 +2045,7 @@
                     ...(await request("strings/en-us")),
                     ...translated,
                   };
+            uiLocale = value;
             localize();
             return;
           } catch (e) {

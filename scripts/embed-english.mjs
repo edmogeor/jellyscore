@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSync } from "esbuild";
+import { buildSync, transformSync } from "esbuild";
 
 const [template, dictionary, output] = process.argv.slice(2);
 const strings = JSON.parse(readFileSync(dictionary, "utf8"));
@@ -25,6 +25,14 @@ let html = readFileSync(template, "utf8").replace(
 );
 // Ship the player inside the existing admin-page resource, without CDN requests.
 const videojs = new URL("../node_modules/@videojs/cdn/", import.meta.url);
+const localeImports = ['import "@videojs/html/i18n";'];
+for (const file of readdirSync(
+  new URL("../Jellyfin.Plugin.JellyScore/Strings/", import.meta.url),
+)) {
+  if (!file.endsWith(".json") || file === "en-us.json") continue;
+  const locale = Intl.getCanonicalLocales(file.replace(/\.json$/, ""))[0];
+  localeImports.push('import "./locales/' + locale + '.js";');
+}
 const skin = readFileSync(new URL("audio-neutral.js", videojs), "utf8");
 // Customize the skin at build time, rather than hiding controls in its shadow DOM.
 const playerSkin = skin
@@ -56,7 +64,7 @@ if (
 }
 const player = buildSync({
   stdin: {
-    contents: playerSkin,
+    contents: localeImports.join("\n") + "\n" + playerSkin,
     resolveDir: fileURLToPath(videojs),
     sourcefile: "audio-neutral.js",
   },
@@ -70,10 +78,14 @@ const player = buildSync({
   target: "es2022",
   legalComments: "inline",
   write: false,
-}).outputFiles[0].text.replace(/<\/script/gi, "<\\/script");
+})
+  .outputFiles[0].text.replace(/<\/script/gi, "<\\/script")
+  // Keep literal markers in vendor strings from being treated as page translations.
+  .replaceAll("${", "\\x24{");
 if (player.includes("${")) {
   throw new Error("Player bundle contains Jellyfin localization placeholders");
 }
+transformSync(player, { loader: "js", target: "es2022" });
 html = html
   .replace(
     "/*__THEME_PLAYER_SCRIPT__*/",

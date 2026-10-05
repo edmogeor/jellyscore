@@ -697,6 +697,13 @@ try {
       .getAttribute("href"),
     items[0].Source,
   );
+  const playerLanguage = player.locator("media-i18n");
+  for (const [locale, label] of [["fr", "Couper le son"], ["ja", "ミュート"], ["pt-BR", "Silenciar"]]) {
+    await playerLanguage.evaluate((element, locale) => element.setAttribute("lang", locale), locale);
+    await player.getByRole("button", { name: label, exact: true }).waitFor({ state: "visible" });
+  }
+  await playerLanguage.evaluate(element => element.setAttribute("lang", "en-US"));
+  await player.getByRole("button", { name: "Mute", exact: true }).waitFor({ state: "visible" });
   await player.getByRole("button", { name: "Close", exact: true }).click();
   await player.waitFor({ state: "detached" });
   assert.equal(
