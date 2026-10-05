@@ -1746,7 +1746,7 @@
             button.title = t(downloaderFailureCode);
           else
             button.title =
-              button.dataset.themeDescription || button.dataset.themeAction;
+              button.dataset.themeDescription ?? button.dataset.themeAction;
         }
       };
       const confirmDelete = async (message, title, itemId = null) => {
@@ -2270,7 +2270,7 @@
           refresh.append(icon("refresh"));
           refresh.setAttribute("aria-label", t("refreshThemeFor", item.Name));
           refresh.dataset.themeAction = t("refreshTheme");
-          refresh.dataset.themeDescription = t("refreshThemeHelp");
+          refresh.dataset.themeDescription = "";
           refresh.dataset.requiresDownloader = "true";
           const queueReprocessing = (youtubeUrl = null) => {
             if (
