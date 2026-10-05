@@ -20,6 +20,7 @@ check:
 	dotnet csharpier check
 	npm run format:check
 	npm run lint
+	npm run check:strings
 
 test-unit:
 	dotnet run --project checks/checks.csproj

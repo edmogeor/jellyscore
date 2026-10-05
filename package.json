@@ -3,7 +3,8 @@
   "scripts": {
     "format": "prettier --write Jellyfin.Plugin.JellyScore/config.html package.json",
     "format:check": "prettier --check Jellyfin.Plugin.JellyScore/config.html package.json",
-    "lint": "bash scripts/lint-config.sh"
+    "lint": "bash scripts/lint-config.sh",
+    "check:strings": "node scripts/check-strings.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

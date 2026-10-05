@@ -1413,8 +1413,12 @@
                 <th scope="col" class="detailTableHeaderCell" data-i18n="theme">
                   {{theme}}
                 </th>
-                <th scope="col" class="detailTableHeaderCell" data-i18n="added">
-                  {{added}}
+                <th
+                  scope="col"
+                  class="detailTableHeaderCell"
+                  data-i18n="updated"
+                >
+                  {{updated}}
                 </th>
                 <th
                   scope="col"
@@ -1975,7 +1979,15 @@
             }
           };
           void loadAudio();
-          await helper.open(dialog);
+          const closed = helper.open(dialog);
+          queueMicrotask(() => {
+            if (!controller.signal.aborted) {
+              skin.shadowRoot
+                ?.querySelector('[part="loading-indicator"]')
+                ?.setAttribute("aria-label", t("loadingAudio"));
+            }
+          });
+          await closed;
         } finally {
           stop();
           page.removeEventListener("pagehide", close);
