@@ -464,6 +464,13 @@ try {
     "the preview decodes installed audio",
   );
   await player.locator(".themeAudioSpinner").waitFor({ state: "hidden" });
+  assert.equal(
+    await player
+      .locator("media-playback-rate-button, media-playback-rate-radio-group")
+      .count(),
+    0,
+    "the player does not expose playback-speed controls",
+  );
   await page.waitForFunction(
     () => !document.querySelector("#themeSongsPlayer audio").paused,
   );
@@ -603,18 +610,14 @@ try {
     "custom sources are not prefilled",
   );
   await input.fill("https://example.com/theme.mp3");
-  await dialog
-    .getByRole("button", { name: "Replace", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "Replace", exact: true }).click();
   assert.equal(
     await input.evaluate((element) => element.validity.valid),
     false,
   );
   assert.equal(edits.length, 0, "custom URLs cannot queue reprocessing");
   await input.fill("https://youtu.be/bbbbbbbbbbb");
-  await dialog
-    .getByRole("button", { name: "Replace", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "Replace", exact: true }).click();
   await page.waitForResponse(/\/ThemeSongs\/[^/]+\/edit$/);
   await dialog.waitFor({ state: "detached" });
   assert.deepEqual(edits, [

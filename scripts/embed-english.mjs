@@ -25,8 +25,26 @@ let html = readFileSync(template, "utf8").replace(
 );
 // Ship the player inside the existing admin-page resource, without CDN requests.
 const videojs = new URL("../node_modules/@videojs/cdn/", import.meta.url);
+const skin = readFileSync(new URL("audio-neutral.js", videojs), "utf8");
+// Customize the skin at build time, rather than hiding controls in its shadow DOM.
+const normalSpeedSkin = skin
+  .replace(/<media-playback-rate-button\b[\s\S]*?<\/media-menu>/, "")
+  .replace(
+    /<media-hotkey\b[^>]*action="speed(?:Up|Down)"[^>]*>\s*<\/media-hotkey>/g,
+    "",
+  );
+if (
+  normalSpeedSkin === skin ||
+  normalSpeedSkin.includes("<media-playback-rate-button")
+) {
+  throw new Error("Video.js playback-speed controls were not removed");
+}
 const player = buildSync({
-  entryPoints: [fileURLToPath(new URL("audio-neutral.js", videojs))],
+  stdin: {
+    contents: normalSpeedSkin,
+    resolveDir: fileURLToPath(videojs),
+    sourcefile: "audio-neutral.js",
+  },
   bundle: true,
   minifyIdentifiers: true,
   minifySyntax: true,
