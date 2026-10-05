@@ -1,3 +1,24 @@
+## [0.3.0.0]
+
+### Added
+
+- Add themes to movies, TV shows, and eligible collections from Manage Downloads. Live-search all libraries for titles without themes, then find a theme automatically or provide a YouTube video link.
+- Process adds, refreshes, and source edits in one server-side queue. Show queued items, processing stages, and outcomes in the downloads table, and continue processing after the browser closes.
+- Retry failed adds, choose another YouTube source, or remove the failed entry from the list without changing media files.
+
+### Improved
+
+- Match the add dialog to Jellyfin's existing controls, show selectable result cards with library names and type icons, and simplify the wording.
+- Support keyboard navigation, keep focus inside the add dialog, announce search results to screen readers, and confirm queued items with a toast.
+- Translate the new flow into all 16 supported languages.
+- Block queueing and file-changing actions during scans in both the page and API, with consistent disabled styles. Block full scans while administrator queue work is pending or active. Keep playback, search, pagination, and scan cancellation available.
+- Prepare checksum-verified yt-dlp and Deno on the first manually added item without needing a prior scan.
+- Simplify processing-queue handoff, downloads-table lookups, error mapping, and admin conditionals while preserving file-ownership checks.
+
+### Maintenance
+
+- Update oxlint from 1.85.0 to 1.86.0.
+
 ## [0.2.0.0]
 
 ### Added

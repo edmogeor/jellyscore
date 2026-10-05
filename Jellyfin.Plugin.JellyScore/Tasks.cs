@@ -25,6 +25,8 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
     private readonly Dictionary<Guid, ThemeProcessingJob> _jobs = new();
     private readonly Lock _gate = new();
 
+    public bool IsBusy { get { lock (_gate) return _jobs.Values.Any(job => job.Processing); } }
+
     public ThemeProcessingJob[] List()
     {
         lock (_gate) return _jobs.Values.GroupBy(job => job.Theme.ItemId)
@@ -243,7 +245,7 @@ public sealed record ScanActiveItem(string Name, string Stage);
 // ReSharper restore NotAccessedPositionalProperty.Global
 
 // ReSharper disable once ClassNeverInstantiated.Global
-public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Store store, ILogger<ThemeScan> logger) : IScheduledTask
+public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Store store, ILogger<ThemeScan> logger, ThemeProcessingWorker processing) : IScheduledTask
 {
     private static ScanStatus _status = new();
     public string Name => "Scan with JellyScore";
@@ -255,6 +257,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken ct)
     {
+        if (processing.IsBusy) throw new InvalidOperationException("Theme processing is queued or running; retry the scan after it finishes.");
         var (knownIds, knownPrior, otherPrior) = store.Read(s => (s.Themes.Keys.ToHashSet(), s.ScanKnownSecondsPerItem, s.ScanOtherSecondsPerItem));
         _status = new ScanStatus { RunId = Guid.NewGuid(), StartedAt = DateTimeOffset.UtcNow, Running = true,
             PriorKnownSecondsPerItem = knownPrior, PriorOtherSecondsPerItem = otherPrior };

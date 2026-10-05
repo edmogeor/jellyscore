@@ -1904,8 +1904,12 @@
         removeAll.querySelector("[data-i18n]").textContent = t(
           bulkBusy ? "deleting" : "deleteAll",
         );
+        const queueBusy = addsProcessing || refreshingItems.size > 0;
         $("#themeScanStart").disabled =
-          scanRunning || bulkBusy || downloaderFailed;
+          scanRunning || bulkBusy || downloaderFailed || queueBusy;
+        $("#themeScanStart").title = queueBusy
+          ? t("queueBusy")
+          : t("scanLibraries");
         for (const button of page.querySelectorAll(
           "#themeRows button[data-theme-action]",
         )) {
@@ -3198,6 +3202,14 @@
         }
       };
       $("#themeScanStart").onclick = async () => {
+        if (
+          scanRunning ||
+          bulkBusy ||
+          downloaderFailed ||
+          addsProcessing ||
+          refreshingItems.size
+        )
+          return;
         try {
           await request("scan", { method: "POST" });
           await progress();

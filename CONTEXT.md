@@ -46,6 +46,7 @@ JellyScore is a Jellyfin 12 plugin that finds likely theme music on YouTube for 
 ## Admin actions
 
 - While a scan runs, disable add, refresh, source edits, per-item deletion, bulk deletion, and failed-add dismissal, and reject those mutations in the admin API. Keep playback, searching, pagination, and scan cancellation available.
+- Disable full scans while administrator adds, refreshes, or source edits are queued or processing. Check the shared queue before accepting a scan in the API and again when the scheduled scan starts. Completed and failed queue entries do not block scans.
 
 - Failed adds offer **Remove from list**, which removes only the completed queue entry, never media files or active work. Add-theme search results use native radio groups for keyboard selection and a persistent polite live region to announce result counts, empty results, and errors. Closing the add modal returns focus to the Add theme action. All shared-queue actions confirm acceptance with an item-naming toast. The first manual add prepares the same checksum-verified yt-dlp and JavaScript runtime as a scan, without needing a prior scan.
 

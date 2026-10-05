@@ -1,4 +1,5 @@
 {
+  "queueBusy": "Espera a que terminen los elementos de la cola.",
   "addTheme": "Añadir tema",
   "addThemeHelp": "Busca una película, serie o colección.",
   "searchLibrary": "Buscar en la biblioteca",

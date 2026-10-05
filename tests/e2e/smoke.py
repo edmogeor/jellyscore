@@ -14,9 +14,28 @@ def field(data, name):
     return data.get(name, data.get(name[0].upper() + name[1:]))
 
 
-def add_until(token, item_id, youtube_url=None):
+def add_until(token, item_id, youtube_url=None, check_scheduled=False):
     status, result = request("POST", f"/ThemeSongs/{item_id}/add", {"youTubeUrl": youtube_url}, token=token, timeout=10)
     assert status == 202, f"queue theme add: {status} {result}"
+    status, error = request("POST", "/ThemeSongs/scan", token=token)
+    assert status == 409 and field(error, "code") == "queueBusy", f"queued adds must block full scans: {status} {error}"
+    if check_scheduled:
+        _, tasks = request("GET", "/ScheduledTasks", token=token)
+        task = next(task for task in tasks if field(task, "key") == "ThemeSongsRescan")
+        previous = field(task, "lastExecutionResult")
+        _, before = request("GET", "/ThemeSongs/scan", token=token)
+        status, _ = request("POST", "/ScheduledTasks/Running/" + field(task, "id"), token=token)
+        assert status in (202, 204), f"request scan through Jellyfin's scheduled-task API: {status}"
+        for _ in range(30):
+            _, current = request("GET", "/ScheduledTasks/" + field(task, "id"), token=token)
+            if field(current, "state") == "Idle" and field(current, "lastExecutionResult") != previous:
+                assert field(field(current, "lastExecutionResult"), "status") == "Failed", f"scheduled scan must refuse active queue work: {current}"
+                _, after = request("GET", "/ThemeSongs/scan", token=token)
+                assert field(after, "runId") == field(before, "runId"), "refused scheduled scan must not process media or reset scan state"
+                break
+            time.sleep(0.2)
+        else:
+            raise AssertionError("scheduled scan did not refuse active queue work")
     for _ in range(180):
         status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
         theme = next((item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(item_id)), None)
@@ -33,6 +52,8 @@ def reprocess_until(token, item_id, youtube_url=None):
     action = "edit" if youtube_url else "refresh"
     status, result = request("POST", f"/ThemeSongs/{item_id}/{action}", {"youTubeUrl": youtube_url} if youtube_url else None, token=token, timeout=10)
     assert status == 202, f"queue {action}: {status} {result}"
+    status, error = request("POST", "/ThemeSongs/scan", token=token)
+    assert status == 409 and field(error, "code") == "queueBusy", f"queued {action} must block full scans: {status} {error}"
     for _ in range(180):
         _, downloads = request("GET", "/ThemeSongs/downloads", token=token)
         theme = next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(item_id))
@@ -364,7 +385,7 @@ for path in (binary, runtime):
     subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "test", "!", "-e", path], check=True)
 _, before_manual = request("GET", "/ThemeSongs/scan", token=token)
 assert field(before_manual, "total") == 0, "no media scan has prepared the download tools"
-add_until(token, dune_item["Id"])
+add_until(token, dune_item["Id"], check_scheduled=True)
 for path in (binary, runtime):
     subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "test", "-x", path], check=True)
 _, after_manual = request("GET", "/ThemeSongs/scan", token=token)
@@ -512,6 +533,18 @@ for _ in range(180):
 else:
     raise AssertionError("unavailable source did not report failure")
 assert field(failed, "pending") and field(failed, "code"), f"failed add must be dismissible: {failed}"
+status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": []}, token)
+assert status == 204, f"select no libraries for the completed-failure scan check: {status}"
+_, before_scan = request("GET", "/ThemeSongs/scan", token=token)
+status, _ = request("POST", "/ThemeSongs/scan", token=token)
+assert status == 202, f"completed failures must not block full scans: {status}"
+for _ in range(10):
+    _, progress = request("GET", "/ThemeSongs/scan", token=token)
+    if field(progress, "runId") != field(before_scan, "runId") and not field(progress, "running"):
+        break
+    time.sleep(1)
+else:
+    raise AssertionError("empty-library scan did not finish after a completed failure")
 status, _ = request("DELETE", f"/ThemeSongs/{unselected_item['Id']}/pending", token=token)
 assert status == 204, f"dismiss failed add: {status}"
 _, downloads = request("GET", "/ThemeSongs/downloads", token=token)

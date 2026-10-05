@@ -1,4 +1,5 @@
 {
+  "queueBusy": "请等待队列中的项目处理完成。",
   "addTheme": "添加主题音乐",
   "addThemeHelp": "查找电影、电视剧或合集。",
   "searchLibrary": "搜索媒体库",

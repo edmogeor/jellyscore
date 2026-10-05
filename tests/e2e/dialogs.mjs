@@ -1376,6 +1376,11 @@ try {
     );
     await queuedRow.waitFor({ state: "visible" });
     assert.equal(
+      await page.locator("#themeScanStart").isDisabled(),
+      true,
+      "full scans are disabled while items are queued",
+    );
+    assert.equal(
       await page.evaluate(
         (name) => window.jellyScoreToasts.includes(name + " added to queue."),
         result.Name,
@@ -1555,10 +1560,25 @@ try {
       "sync" + dictionary.queued,
       locale + ": queued status",
     );
+    assert.equal(
+      await page.locator("#themeScanStart").isDisabled(),
+      true,
+      locale + ": queue blocks full scans",
+    );
+    assert.equal(
+      await page.locator("#themeScanStart").getAttribute("title"),
+      dictionary.queueBusy,
+      locale + ": queue-busy reason",
+    );
     queuedAdds[0].Processing = false;
     queuedAdds[0].Code = "searchFailed";
     queuedAdds[0].Stage = "Failed";
     await row.locator("summary").waitFor({ state: "visible" });
+    assert.equal(
+      await page.locator("#themeScanStart").isEnabled(),
+      true,
+      locale + ": failed adds do not block full scans",
+    );
     await row.locator("summary").click();
     assert.equal(
       await row

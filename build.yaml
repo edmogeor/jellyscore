@@ -1,7 +1,7 @@
 name: "JellyScore"
 guid: "129e8a8b-87f1-48d3-802b-7dd151d72920"
 imageUrl: "https://raw.githubusercontent.com/edmogeor/jellyscore/main/assets/thumb.png"
-version: "0.2.0.0"
+version: "0.3.0.0"
 changelog: ""
 targetAbi: "12.0.0.0"
 framework: "net10.0"

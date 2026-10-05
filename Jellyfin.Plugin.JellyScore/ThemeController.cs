@@ -113,6 +113,7 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     [HttpPost("scan")]
     public IActionResult StartScan()
     {
+        if (processing.IsBusy) return Conflict(new { Code = "queueBusy" });
         tasks.QueueIfNotRunning<ThemeScan>();
         return Accepted();
     }

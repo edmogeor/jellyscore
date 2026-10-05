@@ -1,4 +1,5 @@
 {
+  "queueBusy": "キュー内の処理が終わるまでお待ちください。",
   "addTheme": "テーマ曲を追加",
   "addThemeHelp": "映画、TV 番組、コレクションを探します。",
   "searchLibrary": "ライブラリを検索",

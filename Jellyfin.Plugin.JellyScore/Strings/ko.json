@@ -1,4 +1,5 @@
 {
+  "queueBusy": "대기열 항목의 처리가 끝날 때까지 기다리세요.",
   "addTheme": "테마 음악 추가",
   "addThemeHelp": "영화, TV 프로그램 또는 컬렉션을 찾으세요.",
   "searchLibrary": "라이브러리 검색",

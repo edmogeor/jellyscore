@@ -1,4 +1,5 @@
 {
+  "queueBusy": "Wait for queued items to finish.",
   "addTheme": "Add theme",
   "addThemeHelp": "Find a movie, TV show or collection.",
   "searchLibrary": "Search your library",
