@@ -11,10 +11,8 @@ namespace Jellyfin.Plugin.JellyScore;
 [ApiController]
 [Route("ThemeSongs")]
 [Authorize(Policy = "RequiresElevation")]
-public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskManager tasks, ILibraryManager library) : ControllerBase
+public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskManager tasks, ILibraryManager library, ThemeProcessingWorker processing) : ControllerBase
 {
-    private static readonly SemaphoreSlim RefreshGate = new(1, 1);
-
     [HttpGet("settings")]
     public object Settings() => new { Plugin.Instance.Configuration.Enabled, Plugin.Instance.Configuration.ScanOnLibraryRefresh,
         Plugin.Instance.Configuration.PreferFranchiseThemes,
@@ -70,23 +68,32 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     [HttpGet("downloads")]
     public object Downloads([FromQuery] string? search = null, [FromQuery] int page = 1)
     {
-        var all = themes.List();
-        var rows = all.Where(r => string.IsNullOrEmpty(search) || r.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-            r.Library.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
-        return new { Total = rows.Length, AllTotal = all.Count, Items = rows.Skip((Math.Max(1, page) - 1) * JellyScoreConstants.AdminPageSize)
-            .Take(JellyScoreConstants.AdminPageSize).Select(r => new {
+        var managed = themes.List();
+        var jobs = processing.List();
+        var all = managed.Select(r => (Theme: r, Job: jobs.FirstOrDefault(j => j.Theme.ItemId == r.ItemId)))
+            .Concat(jobs.Where(j => !j.Replacement && !managed.Any(r => r.ItemId == j.Theme.ItemId)).Select(j => (Theme: j.Theme, Job: (ThemeProcessingJob?)j)))
+            .OrderByDescending(row => row.Theme.AddedAt ?? row.Theme.Date).ToArray();
+        var rows = all.Where(row => string.IsNullOrEmpty(search) || row.Theme.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            row.Theme.Library.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
+        return new { Total = rows.Length, AllTotal = all.Length, ManagedTotal = managed.Count,
+            Processing = jobs.Any(j => j.Processing), Items = rows.Skip((Math.Max(1, page) - 1) * JellyScoreConstants.AdminPageSize)
+            .Take(JellyScoreConstants.AdminPageSize).Select(row => { var r = row.Theme; return new {
             r.ItemId, r.Name, r.Kind, r.Year, r.Library, r.Path, r.VideoTitle, r.Score, r.Evidence, r.Date,
-            Source = r.SourceUrl ?? "https://www.youtube.com/watch?v=" + r.VideoId,
+            Source = r.SourceUrl ?? (string.IsNullOrEmpty(r.VideoId) ? null : "https://www.youtube.com/watch?v=" + r.VideoId),
             YouTubeUrl = !r.VideoId.StartsWith("tvdb:", StringComparison.Ordinal) && YouTube.VideoId(r.SourceUrl ?? "https://www.youtube.com/watch?v=" + r.VideoId) is { } videoId
                 ? "https://www.youtube.com/watch?v=" + videoId : null,
-            Status = ThemeService.Status(r) }) };
+            Pending = row.Job is { Replacement: false }, Processing = row.Job?.Processing ?? false,
+            Stage = row.Job is { Processing: true, Stage: not "queued" } ? YouTube.ToolSetupStage ?? row.Job.Stage : row.Job?.Stage,
+            Code = row.Job?.Code, Result = row.Job?.Result,
+            Status = row.Job is { Replacement: false } ? row.Job.Stage : ThemeService.Status(r) }; }) };
     }
 
     [HttpDelete("downloads")]
-    public async Task<object> DeleteAll(CancellationToken ct)
+    public async Task<IActionResult> DeleteAll(CancellationToken ct)
     {
+        if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
         var result = await themes.DeleteAll(ct);
-        return new { result.Deleted, result.Skipped };
+        return Ok(new { result.Deleted, result.Skipped });
     }
 
     [HttpGet("scan")]
@@ -103,43 +110,67 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     public IActionResult CancelScan() { tasks.CancelIfRunning<ThemeScan>(); return Accepted(); }
 
     [HttpPost("{id:guid}/refresh")]
-    public Task<IActionResult> Refresh(Guid id, CancellationToken ct) => Reprocess(id, ct);
+    public IActionResult Refresh(Guid id) => Enqueue(id, null, replacement: true);
 
     public sealed record EditRequest(string? YouTubeUrl);
 
+    [HttpGet("items")]
+    public object AddItems([FromQuery] string? search = null) => themes.AddItems(search, processing.List().Where(j => j.Processing).Select(j => j.Theme.ItemId).ToHashSet());
+
+    [HttpPost("{id:guid}/add")]
+    public IActionResult Add(Guid id, [FromBody] EditRequest request)
+    {
+        string? youtubeUrl = null;
+        if (request.YouTubeUrl is not null)
+        {
+            var videoId = YouTube.VideoId(request.YouTubeUrl);
+            if (videoId is null) return BadRequest(new { Code = "invalidYouTubeUrl" });
+            youtubeUrl = "https://www.youtube.com/watch?v=" + videoId;
+        }
+        return Enqueue(id, youtubeUrl, replacement: false);
+    }
+
+    [HttpDelete("{id:guid}/pending")]
+    public IActionResult Dismiss(Guid id)
+    {
+        if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
+        return processing.Dismiss(id) ? NoContent() : Conflict(new { Code = "requestFailed" });
+    }
+
     [HttpPost("{id:guid}/edit")]
-    public async Task<IActionResult> Edit(Guid id, [FromBody] EditRequest request, CancellationToken ct)
+    public IActionResult Edit(Guid id, [FromBody] EditRequest request)
     {
         var videoId = YouTube.VideoId(request.YouTubeUrl);
         if (videoId is null) return BadRequest(new { Code = "invalidYouTubeUrl" });
-        return await Reprocess(id, ct, "https://www.youtube.com/watch?v=" + videoId);
+        return Enqueue(id, "https://www.youtube.com/watch?v=" + videoId, replacement: true);
     }
 
-    private async Task<IActionResult> Reprocess(Guid id, CancellationToken ct, string? youtubeUrl = null)
+    private IActionResult Enqueue(Guid id, string? youtubeUrl, bool replacement)
     {
-        await RefreshGate.WaitAsync(ct);
-        try { return Ok(new { (await themes.Process(id, true, ct, youtubeUrl: youtubeUrl)).Result }); }
-        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
-        catch (Exception e) when (e is IOException or SearchFailure) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
-        finally { RefreshGate.Release(); }
+        if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
+        try { processing.Enqueue(id, youtubeUrl, replacement); return Accepted(); }
+        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "requestFailed") }); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return UnprocessableEntity(new { Code = "themeLocationUnavailable" }); }
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
+        if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
         try { await themes.Delete(id, ct); return NoContent(); }
         catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "deleteFailed") }); }
         catch (IOException e) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "deleteFailed") }); }
     }
 
-    private static string ErrorCode(Exception e, string fallback) => e.Message switch
+    internal static string ErrorCode(Exception e, string fallback) => e.Message switch
     {
         "Theme changed elsewhere. The file was left untouched." or "Theme changed elsewhere. It was not deleted." or
             "Theme changed during download. The file was left untouched." => "themeChanged",
         "Another theme appeared. The file was left untouched." => "anotherTheme",
         "No managed theme to refresh." or "No managed theme." or "Item no longer exists." => "themeUnavailable",
         "Item is not in a selected library." or "Unsupported item." or "Movie needs a dedicated physical folder." or
-            "Item needs a physical folder inside its library." or "Item folder is missing or unwritable." => "themeLocationUnavailable",
+            "Item needs a physical folder inside its library." or "Item folder is missing or unwritable." or
+            "Collection has no matching movie or physical folder." => "themeLocationUnavailable",
         "Item title is not ready; retry after metadata refresh." => "itemNotReady",
         _ when e is SearchFailure => "searchFailed",
         _ when e is DownloadFailure => "downloadFailed",
