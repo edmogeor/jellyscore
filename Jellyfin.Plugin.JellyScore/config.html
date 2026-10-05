@@ -336,19 +336,7 @@
     }
     #themeSongsPlayer .themeAudioArea {
       position: relative;
-      min-height: 5rem;
       margin: 1.5rem 0;
-    }
-    #themeSongsPlayer .themeAudioSpinner {
-      display: grid;
-      place-items: center;
-      position: absolute;
-      inset: 0;
-      color: var(--jf-palette-primary-main);
-    }
-    #themeSongsPlayer .themeAudioSpinner .material-icons {
-      font-size: 2rem;
-      animation: themeSongsSpin 1.4s linear infinite;
     }
     #themeSongsPlayer audio-player,
     #themeSongsPlayer audio-neutral-skin {
@@ -362,11 +350,21 @@
       --media-border-radius: 4px;
       color-scheme: var(--jf-palette-mode, dark);
     }
-    #themeSongsPlayer .themeAudioArea[aria-busy="true"] audio-player {
+    #themeSongsPlayer audio-neutral-skin[data-loading]::part(play-button) {
       visibility: hidden;
     }
+    #themeSongsPlayer
+      audio-neutral-skin[data-loading]::part(loading-indicator) {
+      display: flex;
+      visibility: visible;
+      opacity: 1;
+    }
+    #themeSongsPlayer audio-neutral-skin[data-loading]::part(loading-icon) {
+      color: var(--jf-palette-primary-main);
+      animation: themeSongsSpin 1.4s linear infinite;
+    }
     @media (prefers-reduced-motion: reduce) {
-      #themeSongsPlayer .themeAudioSpinner .material-icons {
+      #themeSongsPlayer audio-neutral-skin[data-loading]::part(loading-icon) {
         animation: none;
       }
     }
@@ -1899,8 +1897,7 @@
             <div class="formDialogContent smoothScrollY"><div class="dialogContentInner dialogContentInner-mini">
               <p class="fieldDescription"></p>
               <div class="themeAudioArea" aria-busy="true">
-                <div class="themeAudioSpinner" role="status"><span class="material-icons" aria-hidden="true">sync</span></div>
-                <audio-player><audio-neutral-skin><audio preload="metadata"></audio></audio-neutral-skin></audio-player>
+                <audio-player><audio-neutral-skin data-loading><audio preload="metadata"></audio></audio-neutral-skin></audio-player>
               </div>
               <div class="formDialogFooter">
                 <a class="themeSourceLink" target="_blank" rel="noopener noreferrer"><span class="material-icons" aria-hidden="true">open_in_new</span><span></span></a>
@@ -1912,8 +1909,7 @@
           description.textContent = item.VideoTitle || "";
           description.hidden = !description.textContent;
           const area = dialog.querySelector(".themeAudioArea");
-          const spinner = dialog.querySelector(".themeAudioSpinner");
-          spinner.setAttribute("aria-label", t("loadingAudio"));
+          const skin = dialog.querySelector("audio-neutral-skin");
           const source = dialog.querySelector("a");
           source.href = item.Source;
           source.setAttribute("aria-label", t("viewSourceFor", item.Name));
@@ -1934,7 +1930,7 @@
           const loading = (busy) => {
             if (controller.signal.aborted) return;
             area.setAttribute("aria-busy", String(busy));
-            spinner.hidden = !busy;
+            skin.toggleAttribute("data-loading", busy);
           };
           audio.addEventListener("canplay", () => loading(false));
           audio.addEventListener("waiting", () => loading(true));

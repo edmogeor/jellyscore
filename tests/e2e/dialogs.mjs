@@ -630,9 +630,14 @@ try {
     .click();
   const player = page.locator("#themeSongsPlayer");
   await player.waitFor({ state: "visible" });
-  await player.locator(".themeAudioSpinner").waitFor({ state: "visible" });
+  const loadingIndicator = player.locator('[part="loading-indicator"]');
+  await loadingIndicator.waitFor({ state: "visible" });
+  await player.locator("media-time-slider").waitFor({ state: "visible" });
+  await player
+    .getByRole("button", { name: "Mute", exact: true })
+    .waitFor({ state: "visible" });
   assert.equal(
-    await player.locator(".themeAudioSpinner").getAttribute("aria-label"),
+    await loadingIndicator.getAttribute("aria-label"),
     "Loading audio…",
     "loading is visual but retains an accessible label",
   );
@@ -646,7 +651,7 @@ try {
     20,
     "the preview decodes installed audio",
   );
-  await player.locator(".themeAudioSpinner").waitFor({ state: "hidden" });
+  await loadingIndicator.waitFor({ state: "hidden" });
   assert.equal(
     await player
       .locator("media-playback-rate-button, media-playback-rate-radio-group")
@@ -718,7 +723,7 @@ try {
       text.startsWith("The installed theme"),
     ),
   );
-  await player.locator(".themeAudioSpinner").waitFor({ state: "hidden" });
+  await loadingIndicator.waitFor({ state: "hidden" });
   await player.getByRole("button", { name: "Close", exact: true }).click();
   await player.waitFor({ state: "detached" });
   audioAvailable = true;

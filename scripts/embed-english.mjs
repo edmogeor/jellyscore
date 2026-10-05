@@ -27,21 +27,36 @@ let html = readFileSync(template, "utf8").replace(
 const videojs = new URL("../node_modules/@videojs/cdn/", import.meta.url);
 const skin = readFileSync(new URL("audio-neutral.js", videojs), "utf8");
 // Customize the skin at build time, rather than hiding controls in its shadow DOM.
-const normalSpeedSkin = skin
+const playerSkin = skin
   .replace(/<media-playback-rate-button\b[\s\S]*?<\/media-menu>/, "")
   .replace(
     /<media-hotkey\b[^>]*action="speed(?:Up|Down)"[^>]*>\s*<\/media-hotkey>/g,
     "",
+  )
+  .replace(
+    "<media-buffering-indicator",
+    '<media-buffering-indicator part="loading-indicator" role="status" aria-label="' +
+      strings.loadingAudio +
+      '"',
+  )
+  .replace("<media-play-button", '<media-play-button part="play-button"')
+  .replace(
+    '<media-icon family="neutral" name="spinner"',
+    '<media-icon part="loading-icon" family="neutral" name="spinner"',
   );
-if (
-  normalSpeedSkin === skin ||
-  normalSpeedSkin.includes("<media-playback-rate-button")
-) {
+if (playerSkin === skin || playerSkin.includes("<media-playback-rate-button")) {
   throw new Error("Video.js playback-speed controls were not removed");
+}
+if (
+  !["loading-indicator", "loading-icon", "play-button"].every((part) =>
+    playerSkin.includes('part="' + part + '"'),
+  )
+) {
+  throw new Error("Video.js loading controls were not exposed");
 }
 const player = buildSync({
   stdin: {
-    contents: normalSpeedSkin,
+    contents: playerSkin,
     resolveDir: fileURLToPath(videojs),
     sourcefile: "audio-neutral.js",
   },
