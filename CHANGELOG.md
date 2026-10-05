@@ -1,3 +1,19 @@
+## [0.2.0.0]
+
+### Added
+
+- Preview managed themes in an audio dialog with locally bundled Video.js controls and translations matching the admin page's language. Remember preview volume and mute for the browser session.
+- Remember the selected admin tab, warn before leaving unsaved settings, and preserve settings edits during background reloads.
+
+### Improved
+
+- Refine the configuration page with Jellyfin-style Material fields, compact action dialogs, clearer row menus, red deletion actions, and responsive mobile layouts.
+- Keep theme ordering stable after replacements while updating the displayed date. Preserve search, pagination, scroll position, and row focus, and add filtered-result counts and a search clear button.
+- Group scan status in an inner panel and show audio loading and buffering inside the player's play control while keeping timeline and volume controls visible.
+- Lower the default theme loudness target from -26 to -30 LUFS for future downloads using the default setting.
+- Update all 16 supported translations and validate translation keys and placeholders during checks.
+- Simplify theme-processing and admin control flow, and expand browser coverage for dialogs, keyboard navigation, audio playback, and YouTube source validation.
+
 ## [0.1.30.0]
 
 ### Added
