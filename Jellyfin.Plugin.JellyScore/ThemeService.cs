@@ -256,7 +256,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 store.Change(s =>
                 {
                     s.Themes[id] = new ManagedTheme { ItemId = id, Folder = folder, Path = path, LibraryId = libraryId, Library = libraryName,
-                        Kind = item is Movie ? "Movie" : item is BoxSet ? "Collection" : "Series", Name = item.Name, Year = item.ProductionYear,
+                        Kind = item switch { Movie => "Movie", BoxSet => "Collection", _ => "Series" }, Name = item.Name, Year = item.ProductionYear,
                         VideoId = source.Video.Id, VideoTitle = source.Video.Title, Recording = source.Recording, SourceUrl = sourceUrl,
                         Hash = hash, Score = source.Score, Evidence = source.Evidence, Date = date,
                         AddedAt = existing?.AddedAt ?? existing?.Date ?? date };
@@ -337,11 +337,11 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 store.Change(s => s.Outcomes[id] = "No match found: " + reason);
                 return new("No match found", code);
             }
-            if (choice is null) videos = await youtube.Search(work, excludedIds, ct);
-            var (selectedWork, filmChoice, checkedFilmEdition) = choice is null ? await Select(work, videos, false) : (work, choice, false);
-            choice = filmChoice;
-            editionChecked = checkedFilmEdition;
-            work = selectedWork;
+            if (choice is null)
+            {
+                videos = await youtube.Search(work, excludedIds, ct);
+                (work, choice, editionChecked) = await Select(work, videos, false);
+            }
             if (choice is null)
             {
                 videos = videos.Concat(await youtube.Search(work, excludedIds, ct, nextPage: true)).DistinctBy(video => video.Id).ToArray();
@@ -356,7 +356,12 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
             {
                 var reason = Matcher.RejectionReason(work, videos, excludedIds, excludedRecordings, out var reasonCode, minimumMatchStrength);
                 var excluded = reason == "Only previously used recordings were found";
-                var result = replacement ? "No replacement found" : excluded ? "Previously used recording excluded" : "No match found";
+                var result = (replacement, excluded) switch
+                {
+                    (true, _) => "No replacement found",
+                    (_, true) => "Previously used recording excluded",
+                    _ => "No match found"
+                };
                 store.Change(s => s.Outcomes[id] = excluded ? result : result + ": " + reason);
                 return new(result, reasonCode);
             }

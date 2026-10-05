@@ -103,14 +103,7 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     public IActionResult CancelScan() { tasks.CancelIfRunning<ThemeScan>(); return Accepted(); }
 
     [HttpPost("{id:guid}/refresh")]
-    public async Task<IActionResult> Refresh(Guid id, CancellationToken ct)
-    {
-        await RefreshGate.WaitAsync(ct);
-        try { return Ok(new { (await themes.Process(id, true, ct)).Result }); }
-        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
-        catch (Exception e) when (e is IOException or SearchFailure) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
-        finally { RefreshGate.Release(); }
-    }
+    public Task<IActionResult> Refresh(Guid id, CancellationToken ct) => Reprocess(id, ct);
 
     public sealed record EditRequest(string? YouTubeUrl);
 
@@ -119,8 +112,13 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     {
         var videoId = YouTube.VideoId(request.YouTubeUrl);
         if (videoId is null) return BadRequest(new { Code = "invalidYouTubeUrl" });
+        return await Reprocess(id, ct, "https://www.youtube.com/watch?v=" + videoId);
+    }
+
+    private async Task<IActionResult> Reprocess(Guid id, CancellationToken ct, string? youtubeUrl = null)
+    {
         await RefreshGate.WaitAsync(ct);
-        try { return Ok(new { (await themes.Process(id, true, ct, youtubeUrl: "https://www.youtube.com/watch?v=" + videoId)).Result }); }
+        try { return Ok(new { (await themes.Process(id, true, ct, youtubeUrl: youtubeUrl)).Result }); }
         catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
         catch (Exception e) when (e is IOException or SearchFailure) { return UnprocessableEntity(new { Error = e.Message, Code = ErrorCode(e, "refreshFailed") }); }
         finally { RefreshGate.Release(); }

@@ -1495,15 +1495,13 @@
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
             return;
           event.preventDefault();
-          const index =
-            event.key === "Home"
-              ? 0
-              : event.key === "End"
-                ? tabs.length - 1
-                : (tabs.indexOf(tab) +
-                    (event.key === "ArrowRight" ? 1 : -1) +
-                    tabs.length) %
-                  tabs.length;
+          let index;
+          if (event.key === "Home") index = 0;
+          else if (event.key === "End") index = tabs.length - 1;
+          else {
+            const direction = event.key === "ArrowRight" ? 1 : -1;
+            index = (tabs.indexOf(tab) + direction + tabs.length) % tabs.length;
+          }
           selectTab(tabs[index]);
           tabs[index].focus();
         };
@@ -1580,23 +1578,22 @@
         }
         updateRowActions();
       };
-      const settingsValue = () =>
-        JSON.stringify([
-          $("#themeSettings").elements.enabled.checked,
-          $("#themeSettings").elements.scanOnLibraryRefresh.checked,
-          $("#themeSettings").elements.preferFranchiseThemes.checked,
-          $("#themeSettings").elements.minimumMatchStrength.value,
-          $("#themeSettings").elements.targetLufs.value,
-          $("#themeSettings").elements.youTubeCookies.value,
-          $("#themeSettings").elements.tvThemeUrlTemplate.value,
-          [
-            ...$("#themeSettings").querySelectorAll(
-              "input[name=library]:checked",
-            ),
-          ]
+      const settingsValue = () => {
+        const form = $("#themeSettings");
+        const fields = form.elements;
+        return JSON.stringify([
+          fields.enabled.checked,
+          fields.scanOnLibraryRefresh.checked,
+          fields.preferFranchiseThemes.checked,
+          fields.minimumMatchStrength.value,
+          fields.targetLufs.value,
+          fields.youTubeCookies.value,
+          fields.tvThemeUrlTemplate.value,
+          [...form.querySelectorAll("input[name=library]:checked")]
             .map((x) => x.value.toLowerCase())
             .sort(),
         ]);
+      };
       const updateSave = () => {
         $("#themeSettings button[type=submit]").disabled =
           !settingsLoaded || settingsSaving || !hasUnsavedSettings();
@@ -1611,10 +1608,9 @@
         const target = id
           ? row?.querySelector("summary")
           : $("#themeBulkMenu summary");
-        (target?.closest("[hidden]")
-          ? $("#themeSearch")
-          : target || $("#themeSearch")
-        ).focus({ preventScroll: true });
+        const focusTarget =
+          !target || target.closest("[hidden]") ? $("#themeSearch") : target;
+        focusTarget.focus({ preventScroll: true });
       };
       const confirmLeaving = async () => {
         if (navigationPending) return false;
@@ -1821,7 +1817,6 @@
           const input = dialog.querySelector("input");
           dialog.querySelector("label").textContent = t("youTubeUrl");
           input.value = item.YouTubeUrl || "";
-          input.placeholder = "https://www.youtube.com/watch?v=…";
           dialog.querySelector(".button-submit").textContent = t("confirmEdit");
           const cancel = dialog.querySelector(".button-cancel");
           cancel.textContent = t("cancel");
@@ -1831,23 +1826,25 @@
           dialog.querySelector("form").onsubmit = (event) => {
             event.preventDefault();
             const url = new URL(input.value.trim());
-            const id =
-              url.hostname === "youtu.be"
-                ? url.pathname.slice(1)
-                : [
-                      "youtube.com",
-                      "www.youtube.com",
-                      "m.youtube.com",
-                      "music.youtube.com",
-                    ].includes(url.hostname)
-                  ? url.pathname === "/watch"
-                    ? url.searchParams.getAll("v").length === 1
-                      ? url.searchParams.get("v")
-                      : null
-                    : /^\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})$/.exec(
-                        url.pathname,
-                      )?.[2]
-                  : null;
+            let id = null;
+            if (url.hostname === "youtu.be") id = url.pathname.slice(1);
+            else if (
+              [
+                "youtube.com",
+                "www.youtube.com",
+                "m.youtube.com",
+                "music.youtube.com",
+              ].includes(url.hostname)
+            ) {
+              if (url.pathname === "/watch") {
+                const ids = url.searchParams.getAll("v");
+                if (ids.length === 1) id = ids[0];
+              } else {
+                id = /^\/(shorts|embed|live)\/([a-zA-Z0-9_-]{11})$/.exec(
+                  url.pathname,
+                )?.[2];
+              }
+            }
             if (
               !["https:", "http:"].includes(url.protocol) ||
               url.username ||
@@ -2059,12 +2056,10 @@
         e.status === 503 || e.message === "Failed to fetch";
       const silent = (e) =>
         temporary(e) || e.status === 401 || e.status === 403;
-      const userError = (e) =>
-        e.localized
-          ? e.message
-          : strings
-            ? t("requestFailed")
-            : "Request failed. Please retry.";
+      const userError = (e) => {
+        if (e.localized) return e.message;
+        return strings ? t("requestFailed") : "Request failed. Please retry.";
+      };
       const showError = (e) => {
         if (!silent(e)) toast(userError(e));
       };
@@ -2494,14 +2489,12 @@
           .join(" · ");
         $("#themeScanActivity").hidden = !data.Running || !activity;
         $("#themeScanActivity").textContent = activity;
-        const remaining =
-          data.RemainingSeconds == null
-            ? t("estimating")
-            : data.RemainingSeconds < 60
-              ? t("lessThanMinute")
-              : data.RemainingSeconds < 120
-                ? t("aboutMinute")
-                : t("aboutMinutes", Math.ceil(data.RemainingSeconds / 60));
+        let remaining;
+        if (data.RemainingSeconds == null) remaining = t("estimating");
+        else if (data.RemainingSeconds < 60) remaining = t("lessThanMinute");
+        else if (data.RemainingSeconds < 120) remaining = t("aboutMinute");
+        else
+          remaining = t("aboutMinutes", Math.ceil(data.RemainingSeconds / 60));
         const currentPosition = Math.min(
           data.Total,
           data.Processed + (data.ActiveItems?.length || 0),

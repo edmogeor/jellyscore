@@ -698,12 +698,25 @@ try {
     items[0].Source,
   );
   const playerLanguage = player.locator("media-i18n");
-  for (const [locale, label] of [["fr", "Couper le son"], ["ja", "ミュート"], ["pt-BR", "Silenciar"]]) {
-    await playerLanguage.evaluate((element, locale) => element.setAttribute("lang", locale), locale);
-    await player.getByRole("button", { name: label, exact: true }).waitFor({ state: "visible" });
+  for (const [locale, label] of [
+    ["fr", "Couper le son"],
+    ["ja", "ミュート"],
+    ["pt-BR", "Silenciar"],
+  ]) {
+    await playerLanguage.evaluate(
+      (element, locale) => element.setAttribute("lang", locale),
+      locale,
+    );
+    await player
+      .getByRole("button", { name: label, exact: true })
+      .waitFor({ state: "visible" });
   }
-  await playerLanguage.evaluate(element => element.setAttribute("lang", "en-US"));
-  await player.getByRole("button", { name: "Mute", exact: true }).waitFor({ state: "visible" });
+  await playerLanguage.evaluate((element) =>
+    element.setAttribute("lang", "en-US"),
+  );
+  await player
+    .getByRole("button", { name: "Mute", exact: true })
+    .waitFor({ state: "visible" });
   await player.getByRole("button", { name: "Close", exact: true }).click();
   await player.waitFor({ state: "detached" });
   assert.equal(
@@ -821,13 +834,22 @@ try {
     "",
     "custom sources are not prefilled",
   );
-  await input.fill("https://example.com/theme.mp3");
-  await dialog.getByRole("button", { name: "Replace", exact: true }).click();
-  assert.equal(
-    await input.evaluate((element) => element.validity.valid),
-    false,
-  );
-  assert.equal(edits.length, 0, "custom URLs cannot queue reprocessing");
+  for (const url of [
+    "https://example.com/theme.mp3",
+    "https://www.youtube.com/playlist?list=aaaaaaaaaaa",
+    "https://www.youtube.com/watch?v=aaaaaaaaaaa&v=bbbbbbbbbbb",
+    "https://www.youtube.com/watch?v=short",
+    "https://user@www.youtube.com/watch?v=aaaaaaaaaaa",
+  ]) {
+    await input.fill(url);
+    await dialog.getByRole("button", { name: "Replace", exact: true }).click();
+    assert.equal(
+      await input.evaluate((element) => element.validity.valid),
+      false,
+      "invalid source rejected: " + url,
+    );
+    assert.equal(edits.length, 0, "invalid URLs cannot queue reprocessing");
+  }
   await input.fill("https://youtu.be/bbbbbbbbbbb");
   await dialog.getByRole("button", { name: "Replace", exact: true }).click();
   await page.waitForResponse(/\/ThemeSongs\/[^/]+\/edit$/);
@@ -840,6 +862,28 @@ try {
     true,
     "replacement feedback retains its toast",
   );
+
+  for (const url of [
+    "https://www.youtube.com/watch?v=bbbbbbbbbbb",
+    "https://www.youtube.com/shorts/bbbbbbbbbbb",
+    "https://www.youtube.com/embed/bbbbbbbbbbb",
+  ]) {
+    await edit("Custom source");
+    await dialog.waitFor({ state: "visible" });
+    await input.fill(url);
+    const edited = page.waitForResponse(/\/ThemeSongs\/[^/]+\/edit$/);
+    await dialog.getByRole("button", { name: "Replace", exact: true }).click();
+    await (await edited).finished();
+    await dialog.waitFor({ state: "detached" });
+    await page.locator(".themeRowBusy:visible").waitFor({ state: "detached" });
+    assert.deepEqual(
+      edits.at(-1),
+      {
+        YouTubeUrl: "https://www.youtube.com/watch?v=bbbbbbbbbbb",
+      },
+      "video source canonicalized: " + url,
+    );
+  }
 
   await page.evaluate(() => {
     const helper = Dashboard.dialogHelper;

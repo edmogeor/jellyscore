@@ -30,18 +30,20 @@ public sealed class NewItemWorker(ILibraryManager library, ICollectionManager co
     private void Added(object? sender, ItemChangeEventArgs args)
     {
         if (!Plugin.Instance.Configuration.Enabled || args.Item is not (Movie or Series or BoxSet) || args.Item.ExtraType is not null || args.Item.IsVirtualItem) return;
-        lock (_gate)
-        {
-            if (_queued.Add(args.Item.Id) && !_queue.Writer.TryWrite(args.Item.Id)) _queued.Remove(args.Item.Id);
-        }
+        Enqueue(args.Item.Id);
     }
 
     private void CollectionUpdated(object? sender, CollectionModifiedEventArgs args)
     {
         if (!Plugin.Instance.Configuration.Enabled) return;
+        Enqueue(args.Collection.Id);
+    }
+
+    private void Enqueue(Guid id)
+    {
         lock (_gate)
         {
-            if (_queued.Add(args.Collection.Id) && !_queue.Writer.TryWrite(args.Collection.Id)) _queued.Remove(args.Collection.Id);
+            if (_queued.Add(id) && !_queue.Writer.TryWrite(id)) _queued.Remove(id);
         }
     }
 
@@ -145,10 +147,13 @@ public sealed class ScanStatus
         }
     }
 
-    private static double Average(double seconds, int count, double? prior, double initial) => prior is > 0 and < JellyScoreConstants.ScanMaximumPriorSecondsPerItem
-        ? (seconds + JellyScoreConstants.ScanPriorItems * prior.Value) / (count + JellyScoreConstants.ScanPriorItems)
-        : count >= JellyScoreConstants.ScanPriorItems ? seconds / count
-        : (seconds + (JellyScoreConstants.ScanPriorItems - count) * initial) / JellyScoreConstants.ScanPriorItems;
+    private static double Average(double seconds, int count, double? prior, double initial)
+    {
+        if (prior is > 0 and < JellyScoreConstants.ScanMaximumPriorSecondsPerItem)
+            return (seconds + JellyScoreConstants.ScanPriorItems * prior.Value) / (count + JellyScoreConstants.ScanPriorItems);
+        if (count >= JellyScoreConstants.ScanPriorItems) return seconds / count;
+        return (seconds + (JellyScoreConstants.ScanPriorItems - count) * initial) / JellyScoreConstants.ScanPriorItems;
+    }
 }
 // ReSharper restore UnusedAutoPropertyAccessor.Global
 

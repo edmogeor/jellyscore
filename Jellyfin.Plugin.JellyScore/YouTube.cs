@@ -223,7 +223,12 @@ public sealed class YouTube
         var videos = new Dictionary<string, Video>();
         foreach (var title in titles)
         {
-            var query = work.Series ? $"{title} theme song" : work.Franchise ? $"{title} main theme soundtrack" : $"{title} {work.Year} main theme soundtrack";
+            var query = work switch
+            {
+                { Series: true } => $"{title} theme song",
+                { Franchise: true } => $"{title} main theme soundtrack",
+                _ => $"{title} {work.Year} main theme soundtrack"
+            };
             var flat = await Flat(query, JellyScoreConstants.SearchResultCount, ct);
             var shortlist = Shortlist(work, flat, excludedIds, nextPage);
             foreach (var video in await Details(shortlist, ct)) videos[video.Id] = video;
@@ -649,13 +654,13 @@ public static partial class Matcher
         }
         if (eligible.Count > 0)
         {
-            if (eligible.All(c => excludedVideos.Contains(c.Video.Id) || excludedRecordings.Contains(c.Recording)))
+            var available = eligible.Where(c => !excludedVideos.Contains(c.Video.Id) && !excludedRecordings.Contains(c.Recording)).ToArray();
+            if (available.Length == 0)
             {
                 code = "reasonPreviouslyUsed";
                 return "Only previously used recordings were found";
             }
-            if (eligible.Where(c => !excludedVideos.Contains(c.Video.Id) && !excludedRecordings.Contains(c.Recording))
-                .All(c => MatchStrength(c.Score) < minimumMatchStrength))
+            if (available.All(c => MatchStrength(c.Score) < minimumMatchStrength))
             {
                 code = "reasonBelowStrength";
                 return "Only recordings below the minimum match strength were found";
