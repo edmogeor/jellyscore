@@ -600,7 +600,10 @@ try {
     .getByRole("button", { name: "Play theme for Dialog film", exact: true })
     .waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: "Refresh theme for Dialog film", exact: true })
+    .getByRole("button", {
+      name: "Find another theme for Dialog film",
+      exact: true,
+    })
     .waitFor({ state: "visible" });
   const menuItemStyle = (locator) =>
     locator.evaluate((element) => {
