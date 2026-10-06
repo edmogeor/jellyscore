@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Improved\n\n- Keep Manage Downloads in a height-capped scroll panel with sticky column headers and pagination below it. Preserve inner scroll position during updates and reset it for new searches and pages.\n- Place add-theme search results in an inset scroll panel sized to the viewport, with thin scrollbars and keyboard scrolling.\n- Float row action menus above the scroll panel so they stay usable near its edges, reposition them during scrolling, and close them when their row leaves view.\n- Fix the mobile horizontal scrollbar and give table rows consistent padding on desktop and mobile.\n\n",
+        "checksum": "8d19a15b1a794bedd72d583838de5653",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.3.1.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-06T10:33:42Z",
+        "version": "0.3.1.0"
+      },
+      {
         "changelog": "### Added\n\n- Add themes to movies, TV shows, and eligible collections from Manage Downloads. Live-search all libraries for titles without themes, then find a theme automatically or provide a YouTube video link.\n- Process adds, refreshes, and source edits in one server-side queue. Show queued items, processing stages, and outcomes in the downloads table, and continue processing after the browser closes.\n- Retry failed adds, choose another YouTube source, or remove the failed entry from the list without changing media files.\n\n### Improved\n\n- Match the add dialog to Jellyfin's existing controls, show selectable result cards with library names and type icons, and simplify the wording.\n- Support keyboard navigation, keep focus inside the add dialog, announce search results to screen readers, and confirm queued items with a toast.\n- Translate the new flow into all 16 supported languages.\n- Block queueing and file-changing actions during scans in both the page and API, with consistent disabled styles. Block full scans while administrator queue work is pending or active. Keep playback, search, pagination, and scan cancellation available.\n- Prepare checksum-verified yt-dlp and Deno on the first manually added item without needing a prior scan.\n- Simplify processing-queue handoff, downloads-table lookups, error mapping, and admin conditionals while preserving file-ownership checks.\n\n### Maintenance\n\n- Update oxlint from 1.85.0 to 1.86.0.\n\n",
         "checksum": "0524821f49c4d7bb918db9b215b56b8e",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.3.0.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T10:25:57Z",
         "version": "0.1.4.0"
-      },
-      {
-        "changelog": "### Added\n\n- Delete all managed themes across pages and search results while preserving files changed outside the plugin.\n\n### Improved\n\n- Confirm individual and bulk deletion with Jellyfin dialogs featuring a centered title and red Delete button.\n\n",
-        "checksum": "56eeba119c42db44bc6302601ecbd07f",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.3.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T10:03:28Z",
-        "version": "0.1.3.0"
       }
     ]
   }
