@@ -488,10 +488,57 @@ try {
     () =>
       document.querySelector("#themePageInfo").textContent === "Page 2 of 3",
   );
+  const tableScroll = page.locator("#themeTableScroll");
+  assert.equal(
+    await tableScroll.evaluate(
+      (element) => element.scrollHeight > element.clientHeight,
+    ),
+    true,
+    "downloads use a capped scroll panel",
+  );
+  await tableScroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const bottomRow = page.locator("#themeRows tr").last();
+  await bottomRow.locator("summary").click();
+  const bottomMenu = bottomRow.locator(".themeMenuItems");
+  await bottomMenu.waitFor({ state: "visible" });
+  assert.equal(
+    await bottomMenu.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return (
+        bounds.top >= 0 &&
+        bounds.bottom <= window.innerHeight &&
+        element.contains(
+          document.elementFromPoint(bounds.left + 10, bounds.top + 10),
+        )
+      );
+    }),
+    true,
+    "bottom-row menus float above the scroll panel without clipping",
+  );
+  await tableScroll.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await bottomMenu.waitFor({ state: "hidden" });
+  await tableScroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  assert.equal(
+    await tableScroll.evaluate((element) => {
+      const header = element.querySelector("th").getBoundingClientRect();
+      return Math.abs(header.top - element.getBoundingClientRect().top) < 3;
+    }),
+    true,
+    "column headers stay visible while the downloads scroll",
+  );
+  await page
+    .locator("#themeDownloads")
+    .screenshot({ path: "dist/e2e/downloads-scroll.png" });
   const refreshRow = page.locator("#themeRows tr").nth(10);
   await refreshRow.locator("summary").click();
   const positions = () =>
-    page.locator("#themeSongsPage").evaluate((element) => {
+    page.locator("#themeTableScroll").evaluate((element) => {
       const result = [];
       for (let node = element; node; node = node.parentElement)
         result.push(node.scrollTop);
@@ -996,6 +1043,23 @@ try {
     true,
     "mobile layout does not overflow",
   );
+  assert.equal(
+    await page
+      .locator("#themeTableScroll")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+    true,
+    "the table does not create a horizontal scrollbar on mobile",
+  );
+  assert.equal(
+    await page.locator("#themeTableScroll").evaluate((element) => {
+      const title = element
+        .querySelector("td:first-child")
+        .getBoundingClientRect();
+      return title.left - element.getBoundingClientRect().left >= 12;
+    }),
+    true,
+    "mobile rows have a consistent inset from the scroll panel",
+  );
   await openMenu("Dialog film");
   await page
     .getByRole("button", {
@@ -1126,9 +1190,18 @@ try {
     Library: ["Films", "Shows", "Collections"][index],
     Year: 2000,
   }));
+  let manyResults = false;
+  const extraResults = Array.from({ length: 17 }, (_, index) => ({
+    ...available[0],
+    ItemId: (index + 600).toString(16).padStart(32, "0"),
+    Name: "Unthemed film " + index,
+  }));
   await page.route(/\/ThemeSongs\/items\?/, (route) => {
     const term = new URL(route.request().url()).searchParams.get("search");
-    return route.fulfill({ json: term === "Unthemed" ? available : [] });
+    if (term !== "Unthemed") return route.fulfill({ json: [] });
+    return route.fulfill({
+      json: manyResults ? [...available, ...extraResults] : available,
+    });
   });
   const additions = [];
   const dismissedAdds = [];
@@ -1298,6 +1371,42 @@ try {
       "1",
       "result metadata is not dimmed",
     );
+    if (index === 0) {
+      manyResults = true;
+      await searchInput.fill("");
+      await searchInput.fill("Unthemed");
+      await page.waitForFunction(
+        () => document.querySelectorAll(".themeAddResults input").length === 20,
+      );
+      const resultScroll = addDialog.locator(".themeAddResultsScroll");
+      assert.equal(
+        await resultScroll.evaluate(
+          (element) => element.scrollHeight > element.clientHeight,
+        ),
+        true,
+        "modal results have their own capped scroll panel",
+      );
+      await addDialog.locator(".themeAddResults input").first().focus();
+      await page.keyboard.press("Space");
+      for (let step = 0; step < 19; step++)
+        await page.keyboard.press("ArrowDown");
+      assert.equal(
+        await addDialog.locator(".themeAddResults input").last().isChecked(),
+        true,
+      );
+      assert.equal(
+        await resultScroll.evaluate((element) => element.scrollTop > 0),
+        true,
+        "keyboard selection scrolls the results panel",
+      );
+      await addDialog.screenshot({ path: "dist/e2e/add-theme-scroll.png" });
+      manyResults = false;
+      await searchInput.fill("");
+      await searchInput.fill("Unthemed");
+      await page.waitForFunction(
+        () => document.querySelectorAll(".themeAddResults input").length === 3,
+      );
+    }
     await addDialog.locator(".themeAddResults input").first().focus();
     await page.keyboard.press("Space");
     await page.keyboard.press("ArrowDown");
@@ -1580,6 +1689,7 @@ try {
       locale + ": failed adds do not block full scans",
     );
     await row.locator("summary").click();
+    await row.locator(".themeMenuItems").waitFor({ state: "visible" });
     assert.equal(
       await row
         .getByRole("button", { name: dictionary.tryAgain, exact: true })

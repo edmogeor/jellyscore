@@ -45,6 +45,8 @@ JellyScore is a Jellyfin 12 plugin that finds likely theme music on YouTube for 
 
 ## Admin actions
 
+- Manage Downloads uses a height-capped, keyboard-focusable scroll panel with sticky column headers and pagination outside the panel. Preserve its inner scroll position during row updates and reset it for a new search or page. Row action menus float above scroll clipping. The add-theme modal puts result cards in a separate inset scroll panel sized to the viewport.
+
 - While a scan runs, disable add, refresh, source edits, per-item deletion, bulk deletion, and failed-add dismissal, and reject those mutations in the admin API. Keep playback, searching, pagination, and scan cancellation available.
 - Disable full scans while administrator adds, refreshes, or source edits are queued or processing. Check the shared queue before accepting a scan in the API and again when the scheduled scan starts. Completed and failed queue entries do not block scans.
 

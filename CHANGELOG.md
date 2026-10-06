@@ -1,3 +1,12 @@
+## [0.3.1.0]
+
+### Improved
+
+- Keep Manage Downloads in a height-capped scroll panel with sticky column headers and pagination below it. Preserve inner scroll position during updates and reset it for new searches and pages.
+- Place add-theme search results in an inset scroll panel sized to the viewport, with thin scrollbars and keyboard scrolling.
+- Float row action menus above the scroll panel so they stay usable near its edges, reposition them during scrolling, and close them when their row leaves view.
+- Fix the mobile horizontal scrollbar and give table rows consistent padding on desktop and mobile.
+
 ## [0.3.0.0]
 
 ### Added
