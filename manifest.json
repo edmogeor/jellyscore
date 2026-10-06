@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Improved\n\n- Inset the scrollbars in Manage Downloads and add-theme results, with rounded thumb ends, top and bottom clearance, and a subtle hover color.\n\n",
+        "checksum": "6ee79419a4d1d7f6ff5b0cf87974f2ec",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.3.2.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-06T11:18:14Z",
+        "version": "0.3.2.0"
+      },
+      {
         "changelog": "### Improved\n\n- Keep Manage Downloads in a height-capped scroll panel with sticky column headers and pagination below it. Preserve inner scroll position during updates and reset it for new searches and pages.\n- Place add-theme search results in an inset scroll panel sized to the viewport, with thin scrollbars and keyboard scrolling.\n- Float row action menus above the scroll panel so they stay usable near its edges, reposition them during scrolling, and close them when their row leaves view.\n- Fix the mobile horizontal scrollbar and give table rows consistent padding on desktop and mobile.\n\n",
         "checksum": "8d19a15b1a794bedd72d583838de5653",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.3.1.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T10:54:12Z",
         "version": "0.1.5.0"
-      },
-      {
-        "changelog": "### Improved\n\n- Prefer an eligible TV opening or intro over a higher-scoring soundtrack track, as seen with *Interview with the Vampire* (2022).\n- Use the same 10-second to 8-minute theme duration range for movies and series.\n\n",
-        "checksum": "8e3a7083adcd6034b93b3309be2d21af",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.4.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T10:25:57Z",
-        "version": "0.1.4.0"
       }
     ]
   }
