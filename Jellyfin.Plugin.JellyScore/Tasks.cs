@@ -24,8 +24,14 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
     private readonly Channel<ThemeProcessingJob> _queue = Channel.CreateBounded<ThemeProcessingJob>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { SingleReader = true });
     private readonly Dictionary<Guid, ThemeProcessingJob> _jobs = new();
     private readonly Lock _gate = new();
+    private ScanStatus _status = new() { Kind = "queue" };
+    private ScanStatus _lastStatus = new() { Kind = "queue" };
+    private CancellationTokenSource? _runCancellation;
 
-    public bool IsBusy { get { lock (_gate) return _jobs.Values.Any(job => job.Processing); } }
+    public ScanStatus Status { get { lock (_gate) return _status.Snapshot(); } }
+    public ScanStatus LastStatus { get { lock (_gate) return _lastStatus.Snapshot(); } }
+
+    public bool IsBusy { get { lock (_gate) return _status.Running; } }
 
     public ThemeProcessingJob[] List()
     {
@@ -37,6 +43,7 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
     {
         lock (_gate)
         {
+            if (_status.Cancelling) throw new InvalidOperationException("Theme processing is cancelling; retry after it stops.");
             var job = new ThemeProcessingJob(themes.PrepareRequest(id, replacement, youtubeUrl), youtubeUrl, replacement);
             _jobs[job.RequestId] = job;
             if (!_queue.Writer.TryWrite(job))
@@ -44,8 +51,39 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
                 _jobs.Remove(job.RequestId);
                 throw new InvalidOperationException("The processing queue is full. Please retry.");
             }
+            if (!_status.Running)
+            {
+                _runCancellation = new CancellationTokenSource();
+                _status = new ScanStatus { Kind = "queue", RunId = Guid.NewGuid(), StartedAt = DateTimeOffset.UtcNow,
+                    LastCompletedAt = DateTimeOffset.UtcNow, Running = true, Prepared = true,
+                    PriorOtherSecondsPerItem = _lastStatus.Processed > _lastStatus.KnownProcessed ? _lastStatus.OtherSeconds / (_lastStatus.Processed - _lastStatus.KnownProcessed) : null };
+            }
+            _status.Total++;
             RemoveCompleted(id, job.RequestId);
         }
+    }
+
+    public void Cancel()
+    {
+        lock (_gate)
+        {
+            if (!_status.Running) return;
+            _status.Cancelling = true;
+            _status.Cancelled = true;
+            foreach (var job in _jobs.Values.Where(job => job.Processing && job.Stage == "queued").ToArray())
+                _jobs.Remove(job.RequestId);
+            _runCancellation?.Cancel();
+            FinishIfIdle();
+        }
+    }
+
+    private void FinishIfIdle()
+    {
+        if (!_status.Running || _jobs.Values.Any(job => job.Processing)) return;
+        _status.Finish();
+        _lastStatus = _status.Snapshot();
+        _runCancellation?.Dispose();
+        _runCancellation = null;
     }
 
     private void RemoveCompleted(Guid itemId, Guid except)
@@ -70,6 +108,7 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
         lock (_gate)
         {
             _jobs[id] = _jobs[id] with { Stage = stage, Processing = processing, Code = code, Result = result };
+            if (processing) _status.ActiveItems = [new ScanActiveItem(_jobs[id].Theme.Name, stage)];
             if (!processing) RemoveCompleted(_jobs[id].Theme.ItemId, id);
         }
     }
@@ -79,18 +118,54 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
         await foreach (var job in _queue.Reader.ReadAllAsync(ct))
         {
             var id = job.RequestId;
+            CancellationTokenSource cancellation;
+            lock (_gate)
+            {
+                if (!_jobs.ContainsKey(id)) continue;
+                Update(id, "stagePreparing");
+                _status.CurrentItem = job.Theme.Name;
+                _status.LastCompletedAt = DateTimeOffset.UtcNow;
+                cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, _runCancellation!.Token);
+            }
+            using var runCancellation = cancellation;
             try
             {
-                Update(id, "stagePreparing");
-                var result = await themes.Process(job.Theme.ItemId, job.Replacement, ct, stage => Update(id, stage), job.YouTubeUrl, administratorAdd: !job.Replacement);
-                if (!job.Replacement && result.Result is "Added" or "Already themed") { lock (_gate) _jobs.Remove(id); }
-                else Update(id, "Finished", false, result.ReasonCode ?? (job.Replacement ? null : "reasonNoMatch"), result.Result);
+                var result = await themes.Process(job.Theme.ItemId, job.Replacement, cancellation.Token, stage => Update(id, stage), job.YouTubeUrl, administratorAdd: !job.Replacement);
+                lock (_gate)
+                {
+                    _status.RecordResult(job.Theme.Name, result.ReasonCode is null && result.Result is not ("Added" or "Replaced" or "Already themed")
+                        ? result with { ReasonCode = "reasonNoMatch" } : result, job.Theme.ItemId);
+                    _status.CompleteItem(false);
+                    if (!job.Replacement && result.Result is "Added" or "Already themed") _jobs.Remove(id);
+                    else Update(id, "Finished", false, result.ReasonCode ?? (job.Replacement ? null : "reasonNoMatch"), result.Result);
+                }
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                lock (_gate) { _jobs.Remove(id); _status.Cancelled = true; }
+                if (ct.IsCancellationRequested) break;
+            }
             catch (Exception e)
             {
-                Update(id, "Failed", false, ThemeService.ErrorCode(e, job.Replacement ? "refreshFailed" : "requestFailed"));
-                logger.LogWarning(e, "Queued theme processing failed for {ItemId}", job.Theme.ItemId);
+                var code = ThemeService.ErrorCode(e, job.Replacement ? "refreshFailed" : "requestFailed");
+                var diagnostic = $"Queued theme processing failed for {job.Theme.Name} ({job.Theme.ItemId}): {e.Message}";
+                lock (_gate)
+                {
+                    _status.Failed++;
+                    _status.AddIssue(new ScanIssue(job.Theme.Name, code, true, DateTimeOffset.UtcNow, diagnostic, job.Theme.ItemId));
+                    _status.CompleteItem(false);
+                    Update(id, "Failed", false, code);
+                }
+                logger.LogWarning("{Diagnostic}", diagnostic);
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    _status.ActiveItems = [];
+                    _status.CurrentItem = null;
+                    FinishIfIdle();
+                }
             }
         }
     }
@@ -183,6 +258,7 @@ public sealed class LibraryScanWorker(ITaskManager tasks) : IHostedService
 // ReSharper disable UnusedAutoPropertyAccessor.Global
 public sealed class ScanStatus
 {
+    public string Kind { get; init; } = "scan";
     public Guid RunId { get; set; }
     public DateTimeOffset StartedAt { get; set; }
     internal DateTimeOffset LastCompletedAt { get; set; }
@@ -194,6 +270,8 @@ public sealed class ScanStatus
     internal double OtherSeconds { get; set; }
     internal bool CurrentKnown { get; set; }
     public bool Running { get; set; }
+    public bool Prepared { get; set; }
+    public bool Cancelling { get; set; }
     public bool Cancelled { get; set; }
     public string? StoppedReason { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
@@ -202,12 +280,46 @@ public sealed class ScanStatus
     public int Processed { get; set; }
     public int Total { get; set; }
     public int Added { get; set; }
+    public int Updated { get; set; }
     public int AlreadyThemed { get; set; }
     public int Excluded { get; set; }
     public int NoMatch { get; set; }
     public ScanIssue[] Issues { get; set; } = [];
     public int Unsupported { get; set; }
     public int Failed { get; set; }
+
+    internal ScanStatus Snapshot() => (ScanStatus)MemberwiseClone();
+
+    internal void AddIssue(ScanIssue issue) =>
+        Issues = [.. Issues.TakeLast(JellyScoreConstants.ScanRecentIssues - 1), issue];
+
+    internal void RecordResult(string name, ThemeResult result, Guid? itemId = null)
+    {
+        if (result.Result == "Added") Added++;
+        else if (result.Result == "Replaced") Updated++;
+        else if (result.Result == "Already themed") AlreadyThemed++;
+        else if (result.Result == "Previously used recording excluded") Excluded++;
+        else NoMatch++;
+        if (result.ReasonCode is { } code) AddIssue(new ScanIssue(name, code, false, DateTimeOffset.UtcNow, null, itemId));
+    }
+
+    internal void CompleteItem(bool known)
+    {
+        var completedAt = DateTimeOffset.UtcNow;
+        if (known) { KnownProcessed++; KnownSeconds += (completedAt - LastCompletedAt).TotalSeconds; }
+        else OtherSeconds += (completedAt - LastCompletedAt).TotalSeconds;
+        Processed++;
+        LastCompletedAt = completedAt;
+    }
+
+    internal void Finish()
+    {
+        Running = false;
+        Cancelling = false;
+        FinishedAt = DateTimeOffset.UtcNow;
+        CurrentItem = null;
+        ActiveItems = [];
+    }
     // ReSharper disable once UnusedMember.Global
     public string? ToolSetupStage => YouTube.ToolSetupStage;
     // ReSharper disable once UnusedMember.Global
@@ -240,7 +352,7 @@ public sealed class ScanStatus
 // ReSharper restore UnusedAutoPropertyAccessor.Global
 
 // ReSharper disable NotAccessedPositionalProperty.Global
-public sealed record ScanIssue(string Name, string Code, bool Failed, DateTimeOffset At, string? Diagnostic);
+public sealed record ScanIssue(string Name, string Code, bool Failed, DateTimeOffset At, string? Diagnostic, Guid? ItemId = null);
 public sealed record ScanActiveItem(string Name, string Stage);
 // ReSharper restore NotAccessedPositionalProperty.Global
 
@@ -248,12 +360,14 @@ public sealed record ScanActiveItem(string Name, string Stage);
 public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Store store, ILogger<ThemeScan> logger, ThemeProcessingWorker processing) : IScheduledTask
 {
     private static ScanStatus _status = new();
+    private static ScanStatus _lastStatus = new();
     public string Name => "Scan with JellyScore";
     public string Key => JellyScoreConstants.ScanTaskKey;
     public string Description => "Find themes in selected movie and TV libraries.";
     public string Category => "Library";
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => [];
     public ScanStatus Status => _status;
+    public ScanStatus LastStatus => _lastStatus;
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken ct)
     {
@@ -266,7 +380,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
         {
             themes.ResetSuppression();
             var selected = Plugin.Instance.Configuration.SelectedLibraries(library);
-            if (selected.Length == 0) { progress.Report(JellyScoreConstants.ProgressComplete); return; }
+            if (selected.Length == 0) { status.Prepared = true; progress.Report(JellyScoreConstants.ProgressComplete); return; }
             var query = new InternalItemsQuery { IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.BoxSet], AncestorIds = selected, Recursive = true };
             var items = new List<(Guid Id, string Name, bool Known)>();
             for (var offset = 0; ; offset += JellyScoreConstants.ScanBatchSize)
@@ -279,6 +393,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                 if (batch.Length < JellyScoreConstants.ScanBatchSize) break;
             }
             status.Total = items.Count;
+            status.Prepared = true;
             status.KnownTotal = items.Count(item => item.Known);
             status.StartedAt = DateTimeOffset.UtcNow;
             status.LastCompletedAt = status.StartedAt;
@@ -299,13 +414,9 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                     });
                     lock (status)
                     {
-                        if (result.Result == "Added") status.Added++;
-                        else if (result.Result == "Already themed") status.AlreadyThemed++;
-                        else if (result.Result == "Previously used recording excluded") status.Excluded++;
-                        else status.NoMatch++;
-                        if (result.ReasonCode is { } code)
+                        status.RecordResult(item.Name, result, item.Id);
+                        if (result.ReasonCode is not null)
                         {
-                            AddIssue(status, new ScanIssue(item.Name, code, false, DateTimeOffset.UtcNow, null));
                             logger.LogDebug("Skipped {ItemId}: {Reason}", item.Id, themes.Outcome(item.Id));
                         }
                     }
@@ -315,7 +426,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                     lock (status)
                     {
                         status.Unsupported++;
-                        AddIssue(status, new ScanIssue(item.Name, "scanUnsupported", false, DateTimeOffset.UtcNow, null));
+                        AddIssue(status, new ScanIssue(item.Name, "scanUnsupported", false, DateTimeOffset.UtcNow, null, item.Id));
                     }
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -325,7 +436,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                     lock (status)
                     {
                         status.StoppedReason = "scanRateLimited";
-                        AddIssue(status, new ScanIssue(item.Name, "scanRateLimited", true, DateTimeOffset.UtcNow, diagnostic));
+                        AddIssue(status, new ScanIssue(item.Name, "scanRateLimited", true, DateTimeOffset.UtcNow, diagnostic, item.Id));
                     }
                     logger.LogWarning("Theme scan paused for {Name} ({ItemId}): {Message}", item.Name, item.Id, e.Message);
                     throw;
@@ -341,18 +452,14 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                             SearchFailure => "searchFailed",
                             DownloadFailure => "downloadFailed",
                             _ => "scanItemFailed"
-                        }, true, DateTimeOffset.UtcNow, diagnostic));
+                        }, true, DateTimeOffset.UtcNow, diagnostic, item.Id));
                     }
                     logger.LogWarning("Theme scan failed for {Name} ({ItemId}): {Message}", item.Name, item.Id, e.Message);
                 }
                 finally { lock (status) { status.ActiveItems = []; status.CurrentItem = null; } }
                 lock (status)
                 {
-                    var completedAt = DateTimeOffset.UtcNow;
-                    if (item.Known) { status.KnownProcessed++; status.KnownSeconds += (completedAt - status.LastCompletedAt).TotalSeconds; }
-                    else status.OtherSeconds += (completedAt - status.LastCompletedAt).TotalSeconds;
-                    status.Processed++;
-                    status.LastCompletedAt = completedAt;
+                    status.CompleteItem(item.Known);
                     progress.Report((double)JellyScoreConstants.ProgressComplete * status.Processed / status.Total);
                 }
             }
@@ -367,9 +474,9 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { status.Cancelled = true; throw; }
         catch (Exception) { status.StoppedReason ??= "scanStopped"; throw; }
-        finally { status.Running = false; status.FinishedAt = DateTimeOffset.UtcNow; status.CurrentItem = null; status.ActiveItems = []; }
+        finally { lock (status) { status.Finish(); _lastStatus = status.Snapshot(); } }
     }
 
     private static void AddIssue(ScanStatus status, ScanIssue issue) =>
-        status.Issues = [.. status.Issues.TakeLast(JellyScoreConstants.ScanRecentIssues - 1), issue];
+        status.AddIssue(issue);
 }

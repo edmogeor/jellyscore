@@ -287,7 +287,7 @@ for _ in range(60):
 else:
     raise AssertionError("JellyScore did not run after Jellyfin's library scan")
 assert_settings(token, False, [])
-for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/strings/en-us"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit")]:
+for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/strings/en-us"), ("GET", "/ThemeSongs/activity"), ("POST", "/ThemeSongs/queue/cancel"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit")]:
     status, _ = request(method, path)
     assert status in (401, 403), f"unauthorized {path}: {status}"
 print("Jellyfin 12 plugin smoke checks passed")
@@ -361,6 +361,51 @@ assert status == 409, f"dismissal cannot remove a user theme: {status}"
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "cmp", "-s",
                 "/tmp/user-theme-original", "/media/movies/User Theme (2000)/theme.mp3"], check=True)
 print("Add-theme search, source validation, authorization, and existing-file protection passed")
+_, activity_before = request("GET", "/ThemeSongs/activity", token=token)
+last_activity_id = field(field(activity_before, "last"), "runId")
+queue_ids = [item["Id"] for item in items["Items"] if item["Name"] in ("Dune", "Unselected Example")]
+for item_id in queue_ids:
+    status, result = request("POST", f"/ThemeSongs/{item_id}/add", {}, token)
+    assert status == 202, f"queue cancellable work: {status} {result}"
+    if item_id == queue_ids[0]:
+        _, first = request("GET", "/ThemeSongs/activity", token=token)
+        single = field(first, "current")
+        assert field(single, "kind") == "queue" and field(single, "total") == 1, f"single jobs use the shared activity status: {first}"
+_, active = request("GET", "/ThemeSongs/activity", token=token)
+queue = field(active, "current")
+assert field(queue, "kind") == "queue" and field(queue, "running") and field(queue, "total") == 2, f"activity must include the whole queue: {active}"
+status, error = request("POST", "/ThemeSongs/scan", token=token)
+assert status == 409 and field(error, "code") == "queueBusy", f"active queue must block scans: {status} {error}"
+status, _ = request("POST", "/ThemeSongs/queue/cancel", token=token)
+assert status == 202, f"cancel queue: {status}"
+for _ in range(60):
+    _, activity = request("GET", "/ThemeSongs/activity", token=token)
+    if field(activity, "current") is None:
+        break
+    time.sleep(0.2)
+else:
+    raise AssertionError(f"queue did not cancel safely: {activity}")
+cancelled = field(activity, "last")
+assert field(cancelled, "cancelled") and field(cancelled, "finishedAt") and not field(cancelled, "cancelling"), f"retain cancelled queue summary: {activity}"
+assert field(cancelled, "failed") == field(queue, "failed"), f"cancellation must not count as failure: {activity}"
+assert not field(cancelled, "activeItems"), f"cancelled queue must clear active work: {activity}"
+assert field(cancelled, "kind") == "queue" and field(cancelled, "runId") != last_activity_id, "queue completion replaces the scan as last activity"
+_, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+assert not field(downloads, "processing"), f"cancelled jobs must release the shared queue: {downloads}"
+request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": []}, token)
+status, _ = request("POST", "/ThemeSongs/scan", token=token)
+assert status == 202, f"scan after queue cancellation: {status}"
+for _ in range(60):
+    _, activity = request("GET", "/ThemeSongs/activity", token=token)
+    last = field(activity, "last")
+    if field(activity, "current") is None and field(last, "runId") != field(cancelled, "runId"):
+        break
+    time.sleep(0.2)
+else:
+    raise AssertionError(f"completed scan did not replace last activity: {activity}")
+assert field(last, "kind") == "scan" and field(last, "total") == 0, f"scan and queue share last activity: {activity}"
+request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": library_ids}, token)
+print("Unified activity status, queue cancellation, and latest-completion summary passed")
 if os.environ.get("LIVE_YOUTUBE") == "0":
     raise SystemExit(0)
 options = films["LibraryOptions"]

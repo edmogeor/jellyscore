@@ -110,6 +110,23 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     [HttpGet("scan")]
     public object Progress() => scan.Status;
 
+    [HttpGet("activity")]
+    public object Activity()
+    {
+        var status = scan.Status;
+        lock (status)
+        {
+            var queue = processing.Status;
+            var lastScan = scan.LastStatus;
+            var lastQueue = processing.LastStatus;
+            var last = (lastScan.FinishedAt ?? DateTimeOffset.MinValue) >= (lastQueue.FinishedAt ?? DateTimeOffset.MinValue) ? lastScan : lastQueue;
+            return new { Current = status.Running ? status.Snapshot() : queue.Running ? queue : null, Last = last.Snapshot() };
+        }
+    }
+
+    [HttpPost("queue/cancel")]
+    public IActionResult CancelQueue() { processing.Cancel(); return Accepted(); }
+
     [HttpPost("scan")]
     public IActionResult StartScan()
     {
@@ -119,7 +136,12 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     }
 
     [HttpPost("scan/cancel")]
-    public IActionResult CancelScan() { tasks.CancelIfRunning<ThemeScan>(); return Accepted(); }
+    public IActionResult CancelScan()
+    {
+        if (scan.Status.Running) scan.Status.Cancelling = true;
+        tasks.CancelIfRunning<ThemeScan>();
+        return Accepted();
+    }
 
     [HttpPost("{id:guid}/refresh")]
     public IActionResult Refresh(Guid id) => Enqueue(id, null, replacement: true);

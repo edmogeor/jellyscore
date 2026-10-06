@@ -179,15 +179,50 @@ try {
     return route.fulfill({ response, json: data });
   });
   let scanStatus = {
+    Kind: "scan",
+    RunId: "initial-scan",
     Running: false,
+    Prepared: true,
+    StartedAt: new Date().toISOString(),
+    FinishedAt: new Date().toISOString(),
     Processed: 0,
     Total: 0,
     Added: 0,
+    Updated: 0,
     Failed: 0,
   };
-  await page.route(/\/ThemeSongs\/scan$/, (route) =>
-    route.fulfill({ json: scanStatus }),
-  );
+  let queueStatus = {
+    ...scanStatus,
+    Kind: "queue",
+    RunId: "initial-queue",
+    FinishedAt: null,
+  };
+  let lastCompletedScan = { ...scanStatus };
+  let lastCompletedQueue = { ...queueStatus };
+  await page.route(/\/ThemeSongs\/activity$/, (route) => {
+    if (!scanStatus.Running && scanStatus.FinishedAt)
+      lastCompletedScan = { ...scanStatus };
+    if (!queueStatus.Running && queueStatus.FinishedAt)
+      lastCompletedQueue = { ...queueStatus };
+    return route.fulfill({
+      json: {
+        Current: scanStatus.Running
+          ? scanStatus
+          : queueStatus.Running
+            ? queueStatus
+            : null,
+        Last:
+          (lastCompletedScan.FinishedAt || "") >=
+          (lastCompletedQueue.FinishedAt || "")
+            ? lastCompletedScan
+            : lastCompletedQueue,
+      },
+    });
+  });
+  await page.route(/\/ThemeSongs\/queue\/cancel$/, (route) => {
+    queueStatus = { ...queueStatus, Cancelling: true, Cancelled: true };
+    return route.fulfill({ status: 202 });
+  });
   let expandedDownloads = false;
   let holdSearch = false;
   let releaseSearch;
@@ -576,25 +611,62 @@ try {
   );
   scanStatus = {
     ...scanStatus,
+    RunId: "scan-run",
+    Prepared: false,
+    FinishedAt: null,
+    StartedAt: new Date().toISOString(),
     Running: true,
-    Total: 2,
-    ActiveItems: [{ Name: "Dialog film", Stage: "stageSearching" }],
+    Total: 0,
+    ActiveItems: [],
   };
   await page.waitForFunction(() =>
     document
-      .querySelector("#themeProgress")
-      .textContent.startsWith("Scanning 1 of 2"),
+      .querySelector("#themeActiveRun .themeScanState")
+      ?.textContent.startsWith("Preparing"),
   );
   assert.equal(
-    await page.locator("#themeScanDetails dd").count(),
+    await page.locator("#themeActiveRun .themeScanDetails dd").count(),
     4,
     "primary scan counts keep a stable layout, including zeros",
   );
   assert.equal(
-    await page.locator("#themeScanBar").getAttribute("value"),
+    await page.locator("#themeActiveRun .themeScanBar").getAttribute("value"),
     null,
     "the first active item is not counted as completed",
   );
+  scanStatus = {
+    ...scanStatus,
+    Prepared: true,
+    Total: 2,
+    ActiveItems: [{ Name: "Dialog film", Stage: "stageSearching" }],
+  };
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeActiveRun .themeScanState").textContent ===
+      "Dialog film: Searching",
+  );
+  assert.ok(
+    (
+      await page.locator("#themeActiveRun .themeProgress").textContent()
+    ).startsWith("0 of 2 · "),
+    "the first active item keeps the completed count at zero with ETA below the item status",
+  );
+  assert.equal(
+    await page.locator("#themeActiveRun .themeScanBar").getAttribute("value"),
+    "0",
+  );
+  assert.equal(
+    await page.locator(".themeScanActivity").count(),
+    0,
+    "the current item is not repeated in a second line",
+  );
+  scanStatus = { ...scanStatus, ToolSetupStage: "stagePreparingTools" };
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeActiveRun .themeScanState").textContent ===
+      "Dialog film: Preparing yt-dlp and JavaScript runtime",
+  );
+  scanStatus = { ...scanStatus, ToolSetupStage: null };
   assert.equal(
     await page.locator("#themeAdd").isDisabled(),
     true,
@@ -618,7 +690,10 @@ try {
       "refresh, source editing, and deletion are disabled during a scan",
     );
   assert.equal(await page.locator("#themeSearch").isEnabled(), true);
-  assert.equal(await page.locator("#themeScanCancel").isEnabled(), true);
+  assert.equal(
+    await page.locator("#themeActiveRun .themeScanCancel").isEnabled(),
+    true,
+  );
   await page.waitForTimeout(300);
   const disabledActionStyle = await disabledStyle(page.locator("#themeAdd"));
   assert.deepEqual(
@@ -644,24 +719,249 @@ try {
   scanStatus = {
     ...scanStatus,
     Processed: 1,
+    Prepared: true,
     ActiveItems: [{ Name: "Custom source", Stage: "stageSearching" }],
   };
   await page.waitForFunction(() =>
     document
-      .querySelector("#themeProgress")
-      .textContent.startsWith("Scanning 2 of 2"),
+      .querySelector("#themeActiveRun .themeProgress")
+      .textContent.startsWith("1 of 2 · "),
   );
   assert.equal(
-    await page.locator("#themeScanBar").getAttribute("value"),
+    await page.locator("#themeActiveRun .themeScanBar").getAttribute("value"),
     "50",
     "the progress bar counts completed items",
   );
-  scanStatus = { ...scanStatus, Running: false, ActiveItems: [] };
+  scanStatus = {
+    ...scanStatus,
+    Running: false,
+    Processed: 2,
+    ActiveItems: [],
+    FinishedAt: new Date().toISOString(),
+  };
   await page.locator("#themeScanStart").waitFor({ state: "visible" });
   await page.waitForFunction(
     () =>
       !document.querySelector("#themeRows button[data-destructive]").disabled,
   );
+  await page.waitForFunction(
+    () => document.querySelector("#themeLastActivity").open,
+  );
+  assert.equal(
+    await page.locator("#themeLastActivity > summary").textContent(),
+    "Last run",
+  );
+  const diagnostic =
+    "Queued theme processing failed for Dialog film: exact diagnostic";
+  queueStatus = {
+    ...queueStatus,
+    RunId: "queue-run",
+    StartedAt: new Date().toISOString(),
+    Running: true,
+    Prepared: true,
+    Processed: 1,
+    Total: 3,
+    Updated: 1,
+    Failed: 1,
+    ActiveItems: [{ Name: "Dialog film", Stage: "stageDownloading" }],
+    Issues: [
+      {
+        Name: "Dialog film",
+        Code: "downloadFailed",
+        Failed: true,
+        At: new Date().toISOString(),
+        Diagnostic: diagnostic,
+      },
+    ],
+  };
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#themeActiveRun .themeProgress")
+      ?.textContent.startsWith("1 of 3 · "),
+  );
+  assert.equal(await page.locator("#themeScanStart").isVisible(), true);
+  assert.equal(await page.locator("#themeScanStart").isDisabled(), true);
+  assert.equal(await page.locator("#themeQueueBusy").isVisible(), true);
+  assert.equal(
+    await page.locator("#themeActiveRun .themeScanState").textContent(),
+    "Dialog film: Downloading",
+  );
+  assert.equal(
+    await page
+      .locator("#themeLastActivity")
+      .evaluate((element) => element.open),
+    false,
+  );
+  assert.equal(
+    await page.locator("#themeActiveRun .themeScanBar").getAttribute("value"),
+    "33",
+  );
+  await page.locator("#themeActiveRun .themeIssues > summary").click();
+  const scrollbarStyle = (element) => {
+    const style = getComputedStyle(element);
+    const thumb = getComputedStyle(element, "::-webkit-scrollbar-thumb");
+    return {
+      width: style.scrollbarWidth,
+      color: style.scrollbarColor,
+      gutter: style.scrollbarGutter,
+      thumb: {
+        background: thumb.backgroundColor,
+        border: thumb.border,
+        radius: thumb.borderRadius,
+      },
+      webkitWidth: getComputedStyle(element, "::-webkit-scrollbar").width,
+    };
+  };
+  assert.deepEqual(
+    await page
+      .locator("#themeActiveRun .themeIssues ul")
+      .evaluate(scrollbarStyle),
+    await page.locator("#themeTableScroll").evaluate(scrollbarStyle),
+    "issues and downloads use identical scrollbar styling",
+  );
+  assert.equal(
+    await page.locator(".themeUpNext").count(),
+    0,
+    "activity has no upcoming-items list",
+  );
+  const issue = page.locator("#themeActiveRun .themeIssue");
+  assert.ok((await issue.textContent()).includes("The theme download failed"));
+  assert.ok(
+    !(await issue.textContent()).includes(diagnostic),
+    "diagnostics are copyable without being displayed",
+  );
+  const copyIssue = issue.locator("button");
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await copyIssue.click();
+  assert.equal(
+    await page.evaluate(() => navigator.clipboard.readText()),
+    diagnostic,
+    "issue copy uses the exact logged diagnostic",
+  );
+  await copyIssue.focus();
+  queueStatus = {
+    ...queueStatus,
+    Total: 4,
+  };
+  await page.waitForFunction(
+    () => document.querySelector("#themeActiveRun .themeScanBar").value === 25,
+  );
+  assert.equal(
+    await copyIssue.evaluate((element) => element === document.activeElement),
+    true,
+    "progress updates preserve issue action focus",
+  );
+  assert.equal(
+    await page
+      .locator("#themeActiveRun .themeIssues")
+      .evaluate((element) => element.open),
+    true,
+  );
+  await page.locator("#themeActiveRun .themeScanCancel").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeActiveRun .themeScanState").textContent ===
+      "Cancelling…",
+  );
+  assert.equal(
+    await page.locator("#themeActiveRun .themeScanCancel").isDisabled(),
+    true,
+  );
+  queueStatus = {
+    ...queueStatus,
+    Running: false,
+    Cancelling: false,
+    ActiveItems: [],
+    FinishedAt: new Date().toISOString(),
+  };
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeLastActivity").open &&
+      document.querySelector("#themeActiveRun").hidden,
+  );
+  assert.equal(
+    await page
+      .locator("#themeLastActivity > summary")
+      .evaluate((element) => element === document.activeElement),
+    true,
+    "finishing cancellation returns focus to its retained summary",
+  );
+  assert.equal(
+    await page.locator("#themeLastActivity .themeScanState").textContent(),
+    "Cancelled",
+  );
+  assert.equal(
+    await page.locator("#themeLastActivity .themeProgress").textContent(),
+    "1 of 4",
+    "queued jobs replace the scan in the single last-run summary",
+  );
+  assert.equal(
+    await page.locator("#themeLastActivity").evaluate((box) => {
+      const summary = box.querySelector(":scope > summary");
+      const outer = box.getBoundingClientRect();
+      const header = summary.getBoundingClientRect();
+      return (
+        parseFloat(getComputedStyle(box).borderTopWidth) > 0 &&
+        header.left > outer.left &&
+        header.right < outer.right &&
+        header.top > outer.top &&
+        header.bottom < outer.bottom &&
+        getComputedStyle(summary).display === "list-item" &&
+        getComputedStyle(summary).listStyleType !== "none" &&
+        getComputedStyle(box.querySelector(".themeRunSummary .themeScanPanel"))
+          .borderTopWidth === "0px"
+      );
+    }),
+    true,
+    "Last run and its native chevron are inside the single bordered card",
+  );
+  assert.equal(
+    await page.locator("#themeLastActivity .themeScanCancel").isVisible(),
+    false,
+  );
+  await page.locator("#themeLastActivity .themeIssues > summary").click();
+  assert.equal(
+    await page.locator("#themeLastActivity .themeIssue").count(),
+    1,
+    "queue completion retains its issue history",
+  );
+  await page.locator("#themeLastActivity > summary").click();
+  queueStatus = {
+    ...queueStatus,
+    RunId: "single-refresh",
+    Total: 1,
+    Processed: 1,
+    Updated: 1,
+    Cancelled: false,
+    Issues: [],
+    Failed: 0,
+    FinishedAt: new Date().toISOString(),
+  };
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeLastActivity .themeProgress")
+        .textContent === "1 of 1" &&
+      document.querySelector("#themeLastActivity .themeScanState")
+        .textContent === "Completed",
+  );
+  assert.equal(
+    await page
+      .locator("#themeLastActivity")
+      .evaluate((element) => element.open),
+    true,
+    "activities that finish between polls also expand their new summary",
+  );
+  assert.equal(
+    await page.locator("#themeLastActivity .themeIssue").count(),
+    0,
+    "a new completed activity replaces the previous run's issues",
+  );
+  assert.equal(
+    await page.locator(".themeRunKind").count(),
+    0,
+    "all runs use the same presentation without origin or action labels",
+  );
+  await page.locator("#themeLastActivity > summary").click();
   const dialog = page.locator("#themeSongsEdit");
   const openMenu = async (name) =>
     page.locator('summary[aria-label="More actions for ' + name + '"]').click();

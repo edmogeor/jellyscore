@@ -399,6 +399,30 @@ var priorEstimate = new ScanStatus { Running = true, Total = 2, KnownTotal = 1, 
     PriorKnownSecondsPerItem = 2, PriorOtherSecondsPerItem = 30 };
 check(priorEstimate.RemainingSeconds is > 31 and < 33, "saved timings take precedence over first-run defaults");
 check(new ScanStatus { Running = true }.RemainingSeconds is null, "empty scans have no ETA");
+var activity = new ScanStatus { Running = true, Prepared = true, Total = 5, KnownTotal = 2, LastCompletedAt = DateTimeOffset.UtcNow };
+activity.RecordResult("Added film", new ThemeResult("Added"));
+activity.CompleteItem(false);
+activity.RecordResult("Refreshed film", new ThemeResult("Replaced"));
+activity.CompleteItem(true);
+activity.RecordResult("Existing film", new ThemeResult("Already themed"));
+activity.CompleteItem(false);
+activity.RecordResult("Skipped film", new ThemeResult("No replacement found", "reasonNoMatch"));
+activity.CompleteItem(true);
+check(activity.Processed == 4 && activity.Added == 1 && activity.Updated == 1 && activity.AlreadyThemed == 1 && activity.NoMatch == 1 &&
+    activity.Issues is [{ Code: "reasonNoMatch", Failed: false }], "shared activity accounting reports adds, updates, existing themes and skips without counting failures");
+var completedActivity = activity.Snapshot();
+activity.AddIssue(new ScanIssue("Failed film", "downloadFailed", true, DateTimeOffset.UtcNow, "Exact logged diagnostic"));
+check(completedActivity.Issues.Length == 1 && activity.Issues.Length == 2, "retained activity snapshots are independent of later issues");
+for (var index = 0; index < JellyScoreConstants.ScanRecentIssues; index++)
+    activity.AddIssue(new ScanIssue("Issue " + index, "reasonNoMatch", false, DateTimeOffset.UtcNow, null));
+check(activity.Issues.Length == JellyScoreConstants.ScanRecentIssues && activity.Issues[^1].Name.EndsWith((JellyScoreConstants.ScanRecentIssues - 1).ToString()),
+    "activity issue history is bounded and retains the newest issues");
+activity.Cancelled = activity.Cancelling = true;
+activity.ActiveItems = [new ScanActiveItem("Unfinished film", "stageDownloading")];
+activity.Finish();
+check(activity.Cancelled && !activity.Running && !activity.Cancelling && activity.FinishedAt is not null && activity.Processed == 4 &&
+    activity.Failed == 0 && activity.ActiveItems.Length == 0 && activity.RemainingSeconds is null,
+    "cancelled activity retains completed results, clears active work and does not count cancellation as failure");
 check(!File.Exists("dist/JellyScore.zip") || System.IO.Compression.ZipFile.OpenRead("dist/JellyScore.zip").Entries.Select(e => e.Name).Order().SequenceEqual(
     new[] { "Jellyfin.Plugin.JellyScore.dll", "SHA2-256SUMS", "deno-checksums", "deno-version", "yt-dlp-version" }.Order()),
     "plugin archive contains only the DLL and pinned release metadata");

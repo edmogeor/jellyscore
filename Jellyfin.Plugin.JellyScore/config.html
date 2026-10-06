@@ -149,42 +149,48 @@
       max-height: calc(100dvh - 1rem);
       overflow-y: auto;
     }
-    :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea {
+    :is(#themeSongsPage, #themeSongsAdd)
+      :is(.themeScrollArea, .themeScrollbar) {
       overflow-x: hidden;
       overflow-y: auto;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
       scrollbar-width: thin;
       scrollbar-color: var(--jf-palette-text-disabled) transparent;
+    }
+    :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea {
       border: 1px solid var(--jf-palette-divider);
       border-radius: 0.5rem;
       background: var(--jf-palette-background-default);
     }
     @supports selector(::-webkit-scrollbar) {
-      :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea {
+      :is(#themeSongsPage, #themeSongsAdd)
+        :is(.themeScrollArea, .themeScrollbar) {
         scrollbar-width: auto;
         scrollbar-color: auto;
       }
-      :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea::-webkit-scrollbar {
+      :is(#themeSongsPage, #themeSongsAdd)
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar {
         width: 12px;
       }
-      :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea::-webkit-scrollbar,
       :is(#themeSongsPage, #themeSongsAdd)
-        .themeScrollArea::-webkit-scrollbar-track,
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar,
       :is(#themeSongsPage, #themeSongsAdd)
-        .themeScrollArea::-webkit-scrollbar-track-piece,
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar-track,
       :is(#themeSongsPage, #themeSongsAdd)
-        .themeScrollArea::-webkit-scrollbar-corner {
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar-track-piece,
+      :is(#themeSongsPage, #themeSongsAdd)
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar-corner {
         background: transparent;
         border: 0;
         box-shadow: none;
       }
       :is(#themeSongsPage, #themeSongsAdd)
-        .themeScrollArea::-webkit-scrollbar-track {
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar-track {
         margin-block: 4px;
       }
       :is(#themeSongsPage, #themeSongsAdd)
-        .themeScrollArea::-webkit-scrollbar-thumb {
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar-thumb {
         min-height: 2rem;
         border: 3px solid transparent;
         border-radius: 999px;
@@ -192,16 +198,17 @@
         background-clip: padding-box;
       }
       :is(#themeSongsPage, #themeSongsAdd)
-        .themeScrollArea::-webkit-scrollbar-thumb:hover {
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar-thumb:hover {
         background-color: var(--jf-palette-text-secondary);
       }
       :is(#themeSongsPage, #themeSongsAdd)
-        .themeScrollArea::-webkit-scrollbar-button {
+        :is(.themeScrollArea, .themeScrollbar)::-webkit-scrollbar-button {
         display: none;
         height: 0;
       }
     }
-    :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea:focus-visible {
+    :is(#themeSongsPage, #themeSongsAdd)
+      :is(.themeScrollArea, .themeScrollbar):focus-visible {
       outline: 2px solid var(--jf-palette-primary-main);
       outline-offset: 2px;
     }
@@ -888,7 +895,7 @@
     #themeSongsPage #themeSettings > button,
     #themeSongsPage #themeDownloaderRetry,
     #themeSongsPage #themeScanStart,
-    #themeSongsPage #themeScanCancel {
+    #themeSongsPage .themeScanCancel {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -899,12 +906,29 @@
     #themeSongsPage [hidden] {
       display: none !important;
     }
-    #themeSongsPage #themeScanPanel {
+    #themeSongsPage .themeScanPanel {
       margin-top: 1rem;
       padding: 1.25rem;
       border: 1px solid var(--jf-palette-divider);
       border-radius: 0.5rem;
       background: var(--jf-palette-background-default);
+    }
+    #themeSongsPage #themeLastActivity .themeScanPanel {
+      margin-top: 1rem;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    #themeSongsPage #themeLastActivity > summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #themeSongsPage .themeSrOnly {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
     }
     #themeSongsPage .themeProgressLabel,
     #themeSongsPage .themeRowBusy {
@@ -915,8 +939,10 @@
     #themeSongsPage .themeProgressLabel {
       margin-bottom: 0.75rem;
     }
-    #themeSongsPage #themeProgress {
-      margin: 0;
+    #themeSongsPage .themeProgress {
+      margin: 0 0 0.75rem;
+      color: var(--jf-palette-text-secondary);
+      font-variant-numeric: tabular-nums;
     }
     #themeSongsPage .themeProgressLabel .material-icons,
     #themeSongsPage .themeRowBusy .material-icons {
@@ -933,7 +959,7 @@
         transform: rotate(360deg);
       }
     }
-    #themeSongsPage #themeScanPanel #themeScanDetails {
+    #themeSongsPage .themeScanDetails {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
       gap: 1rem;
@@ -941,50 +967,49 @@
       color: var(--jf-palette-text-secondary);
       font-variant-numeric: tabular-nums;
     }
-    #themeSongsPage #themeScanDetails > div {
+    #themeSongsPage .themeScanDetails > div {
       display: flex;
       flex-direction: column-reverse;
       gap: 0.25rem;
     }
-    #themeSongsPage #themeScanDetails dt {
+    #themeSongsPage .themeScanDetails dt {
       font-size: 0.875rem;
     }
-    #themeSongsPage #themeScanDetails dd {
+    #themeSongsPage .themeScanDetails dd {
       margin: 0;
       color: var(--jf-palette-text-primary);
       font-size: 1.25rem;
       font-weight: 600;
     }
-    #themeSongsPage #themeScanState {
-      margin: 0 0 0.75rem;
+    #themeSongsPage .themeScanState {
+      margin: 0;
       font-weight: 600;
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
-    #themeSongsPage #themeScanDates {
+    #themeSongsPage .themeScanDates {
       color: var(--jf-palette-text-secondary);
       margin: 0.5rem 0;
     }
-    #themeSongsPage #themeIssues {
+    #themeSongsPage .themeIssues {
       margin-top: 1rem;
       border: 1px solid var(--jf-palette-divider);
       border-radius: 0.5rem;
       background: var(--jf-palette-background-paper);
     }
-    #themeSongsPage #themeIssues summary {
+    #themeSongsPage .themeIssues summary {
       margin: 0;
       padding: 0.85rem 1rem;
       border-bottom: 1px solid var(--jf-palette-divider);
       cursor: pointer;
       font-weight: 600;
     }
-    #themeSongsPage #themeIssues summary span {
+    #themeSongsPage .themeIssues summary span {
       font-weight: 400;
       color: var(--jf-palette-text-secondary);
     }
-    #themeSongsPage #themeIssues ul {
+    #themeSongsPage .themeIssues ul {
       max-height: 18rem;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      scrollbar-color: var(--jf-palette-text-secondary) transparent;
       list-style: none;
       padding: 0;
       margin: 0;
@@ -1010,6 +1035,17 @@
       align-items: baseline;
       flex-wrap: wrap;
       gap: 0.25rem 0.75rem;
+    }
+    #themeSongsPage .themeIssueLink {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-weight: 700;
+      text-align: left;
+      text-decoration: underline;
+      cursor: pointer;
     }
     #themeSongsPage .themeIssueHeader time {
       margin-left: auto;
@@ -1062,10 +1098,10 @@
       outline: 2px solid var(--jf-palette-primary-main);
       outline-offset: 2px;
     }
-    #themeSongsPage #themeScanCancel {
+    #themeSongsPage .themeScanCancel {
       margin-top: 1rem;
     }
-    #themeSongsPage #themeScanBar {
+    #themeSongsPage .themeScanBar {
       width: 100%;
       height: 0.6rem;
       border: 0;
@@ -1074,16 +1110,16 @@
       appearance: none;
       background: var(--jf-palette-action-selected) !important;
     }
-    #themeSongsPage #themeScanBar::-webkit-progress-bar {
+    #themeSongsPage .themeScanBar::-webkit-progress-bar {
       background: var(--jf-palette-action-selected) !important;
       border-radius: 999px;
     }
-    #themeSongsPage #themeScanBar::-webkit-progress-value {
+    #themeSongsPage .themeScanBar::-webkit-progress-value {
       background: var(--jf-palette-primary-main);
       border-radius: 999px;
       transition: width 0.35s ease-out;
     }
-    #themeSongsPage #themeScanBar::-moz-progress-bar {
+    #themeSongsPage .themeScanBar::-moz-progress-bar {
       background: var(--jf-palette-primary-main);
       border-radius: 999px;
     }
@@ -1101,7 +1137,7 @@
       #themeSongsPage .themeLoading .material-icons {
         animation: none;
       }
-      #themeSongsPage #themeScanBar::-webkit-progress-value {
+      #themeSongsPage .themeScanBar::-webkit-progress-value {
         transition: none;
       }
     }
@@ -1132,11 +1168,6 @@
       flex-shrink: 0;
     }
     #themeSongsPage .detailTable td:first-child {
-      overflow-wrap: anywhere;
-    }
-    #themeSongsPage #themeScanActivity {
-      color: var(--jf-palette-text-secondary);
-      margin: 0.75rem 0;
       overflow-wrap: anywhere;
     }
     #themeSongsPage #themeRateLimit {
@@ -1237,7 +1268,7 @@
       #themeSongsPage #themeSettings > button,
       #themeSongsPage #themeDownloaderRetry,
       #themeSongsPage #themeScanStart,
-      #themeSongsPage #themeScanCancel:not([hidden]) {
+      #themeSongsPage .themeScanCancel:not([hidden]) {
         display: flex;
         width: 100%;
       }
@@ -1497,7 +1528,7 @@
     <div id="themeOverview" role="tabpanel" aria-labelledby="themeOverviewTab">
       <section class="verticalSection">
         <div class="themeSectionHeader">
-          <h3 class="sectionTitle" data-i18n="fullScan">{{fullScan}}</h3>
+          <h3 class="sectionTitle" data-i18n="activity">{{activity}}</h3>
           <button
             is="emby-button"
             id="themeScanStart"
@@ -1507,35 +1538,48 @@
             {{scanLibraries}}
           </button>
         </div>
-        <p class="fieldDescription" data-i18n="scanHelp">{{scanHelp}}</p>
-        <div id="themeScanPanel" hidden>
-          <p id="themeScanState"></p>
-          <div class="themeProgressLabel">
-            <span class="material-icons" aria-hidden="true">sync</span>
-            <p id="themeProgress" role="status" aria-live="polite"></p>
+        <p id="themeQueueBusy" class="fieldDescription" data-i18n="scanHelp">
+          {{scanHelp}}
+        </p>
+        <p
+          id="themeActivityAnnouncement"
+          class="themeSrOnly"
+          role="status"
+          aria-live="polite"
+        ></p>
+        <div id="themeActiveRun" hidden></div>
+        <details id="themeLastActivity" class="themeScanPanel" hidden>
+          <summary data-i18n="lastRun">{{lastRun}}</summary>
+          <div class="themeRunSummary"></div>
+        </details>
+        <template id="themeActivityTemplate">
+          <div class="themeScanPanel">
+            <div class="themeProgressLabel">
+              <span class="material-icons" aria-hidden="true">sync</span>
+              <p class="themeScanState"></p>
+            </div>
+            <p class="themeProgress" hidden></p>
+            <progress
+              class="themeScanBar"
+              aria-label="{{scanProgress}}"
+              data-i18n-aria-label="scanProgress"
+              max="100"
+              value="0"
+            ></progress>
+            <p class="themeScanDates" hidden></p>
+            <dl class="themeScanDetails" hidden></dl>
+            <details class="themeIssues" hidden></details>
+            <button
+              is="emby-button"
+              class="raised themeScanCancel"
+              data-i18n="cancelScan"
+              disabled
+              hidden
+            >
+              {{cancelScan}}
+            </button>
           </div>
-          <progress
-            id="themeScanBar"
-            aria-label="{{scanProgress}}"
-            data-i18n-aria-label="scanProgress"
-            max="100"
-            value="0"
-          ></progress>
-          <p id="themeScanActivity" hidden></p>
-          <p id="themeScanDates" hidden></p>
-          <dl id="themeScanDetails" hidden></dl>
-          <details id="themeIssues" hidden></details>
-          <button
-            is="emby-button"
-            id="themeScanCancel"
-            class="raised"
-            data-i18n="cancelScan"
-            disabled
-            hidden
-          >
-            {{cancelScan}}
-          </button>
-        </div>
+        </template>
       </section>
       <section class="verticalSection" id="themeDownloads" aria-busy="true">
         <div class="themeSectionHeader">
@@ -1552,7 +1596,7 @@
             >
               <span class="material-icons" aria-hidden="true">more_vert</span>
             </summary>
-            <div class="themeMenuItems">
+            <div class="themeMenuItems themeScrollbar">
               <button is="emby-button" id="themeAdd" class="emby-button">
                 <span class="material-icons" aria-hidden="true">add</span>
                 <span data-i18n="addTheme">{{addTheme}}</span>
@@ -1742,6 +1786,13 @@
         total = 0,
         allTotal = 0;
       let scanRunning = false;
+      let queueRunning = false;
+      let queueCancelling = false;
+      let cancelFocusKind = null;
+      page.addEventListener("focusin", (event) => {
+        if (cancelFocusKind && !event.target.closest("#themeActiveRun"))
+          cancelFocusKind = null;
+      });
       let bulkBusy = false;
       let managedTotal = 0;
       let addsProcessing = false;
@@ -1749,8 +1800,7 @@
       let downloaderFailed = false;
       let downloaderFailureCode = "downloaderInstallFailed";
       let confirming = false;
-      let lastScan = null;
-      let lastIssuesKey = "";
+      let lastActivity = null;
       const refreshingItems = new Set();
       const refreshErrors = new Map();
       let savedSettings = "";
@@ -1841,7 +1891,7 @@
         toggle.title = t("actionsFor", item.Name);
         toggle.append(icon("more_vert"));
         const menuItems = document.createElement("div");
-        menuItems.className = "themeMenuItems";
+        menuItems.className = "themeMenuItems themeScrollbar";
         menuItems.setAttribute("popover", "auto");
         menuItems.addEventListener("toggle", (event) => {
           if (event.newState === "closed") menu.open = false;
@@ -2032,8 +2082,10 @@
         const add = $("#themeAdd");
         const busyTitle = scanRunning ? t("availableAfterScan") : t("working");
         removeAll.hidden = managedTotal === 0;
-        add.disabled = scanRunning || bulkBusy || downloaderFailed;
-        if (scanRunning || bulkBusy) add.title = busyTitle;
+        add.disabled =
+          scanRunning || queueCancelling || bulkBusy || downloaderFailed;
+        if (queueCancelling) add.title = t("cancelling");
+        else if (scanRunning || bulkBusy) add.title = busyTitle;
         else if (downloaderFailed) add.title = t(downloaderFailureCode);
         else add.title = t("addTheme");
         removeAll.disabled =
@@ -2045,7 +2097,11 @@
         removeAll.querySelector("[data-i18n]").textContent = t(
           bulkBusy ? "deleting" : "deleteAll",
         );
-        const queueBusy = addsProcessing || refreshingItems.size > 0;
+        const queueBusy =
+          queueRunning || addsProcessing || refreshingItems.size > 0;
+        $("#themeQueueBusy").textContent = t(
+          queueBusy ? "queueBusy" : "scanHelp",
+        );
         $("#themeScanStart").disabled =
           scanRunning || bulkBusy || downloaderFailed || queueBusy;
         $("#themeScanStart").title = queueBusy
@@ -2061,10 +2117,16 @@
           const scanBlocked = scanRunning && button.dataset.readOnly !== "true";
           button.disabled =
             scanBlocked ||
+            (queueCancelling && button.dataset.requiresDownloader === "true") ||
             bulkBusy ||
             busy ||
             (downloaderFailed && button.dataset.requiresDownloader === "true");
           if (scanBlocked) button.title = t("availableAfterScan");
+          else if (
+            queueCancelling &&
+            button.dataset.requiresDownloader === "true"
+          )
+            button.title = t("cancelling");
           else if (bulkBusy || busy) button.title = t("working");
           else if (
             downloaderFailed &&
@@ -3072,89 +3134,171 @@
         if (focusedItem && !confirming) focusRow(focusedItem);
       }
       async function progress() {
-        const data = await request("scan");
+        const activityData = await request("activity");
+        const active = activityData.Current;
+        const summary = activityData.Last;
+        const data = active || summary;
         $("#themeRateLimit").hidden = !data.RateLimitedUntil;
         $("#themeRateLimitMessage").textContent = data.RateLimitedUntil
           ? t("rateLimited", new Date(data.RateLimitedUntil).toLocaleString())
           : "";
         if (
-          lastScan &&
-          (data.Added > lastScan.Added ||
-            (data.RunId !== lastScan.RunId && data.Added > 0) ||
-            (lastScan.Running && !data.Running))
+          lastActivity &&
+          (data.Added > lastActivity.Added ||
+            data.Updated > lastActivity.Updated ||
+            (data.RunId !== lastActivity.RunId &&
+              data.Added + data.Updated > 0) ||
+            (lastActivity.Running && !data.Running))
         )
           load(rows);
-        if (data.Failed > (lastScan?.Failed ?? 0)) load(settings);
-        lastScan = {
-          RunId: data.RunId,
-          Added: data.Added,
-          Failed: data.Failed,
-          Running: data.Running,
-        };
-        scanRunning = data.Running;
+        scanRunning = active?.Kind === "scan";
+        queueRunning = active?.Kind === "queue";
+        queueCancelling = queueRunning && active.Cancelling;
         updateRowActions();
-        $("#themeScanStart").hidden = data.Running;
-        $("#themeScanCancel").disabled = !data.Running;
-        $("#themeScanCancel").hidden = !data.Running;
-        $("#themeScanPanel").hidden = !data.Running && !data.FinishedAt;
-        $("#themeScanState").textContent = data.Running
-          ? t("scanInProgress")
-          : t(
-              data.Cancelled
-                ? "scanCancelled"
-                : data.StoppedReason || "scanCompleted",
-            );
-        $("#themeProgress").parentElement.hidden = !data.Running;
-        $("#themeScanDates").hidden = data.Running;
-        $("#themeScanDates").textContent = data.FinishedAt
+        const container = $("#themeActiveRun");
+        const focusedActivityControl = container.contains(
+          document.activeElement,
+        )
+          ? document.activeElement
+          : null;
+        container.hidden = !active;
+        if (active) renderActivity(container, active);
+        const history = $("#themeLastActivity");
+        history.hidden = !summary.FinishedAt;
+        if (
+          !active &&
+          lastActivity?.Running &&
+          summary.RunId === lastActivity.RunId
+        ) {
+          history
+            .querySelector(".themeRunSummary")
+            .replaceChildren(...container.childNodes);
+        }
+        if (summary.FinishedAt)
+          renderActivity(history.querySelector(".themeRunSummary"), summary);
+        if (active && active.RunId !== lastActivity?.RunId)
+          history.open = false;
+        else if (
+          !active &&
+          summary.FinishedAt &&
+          (lastActivity?.Running || summary.RunId !== lastActivity?.RunId)
+        ) {
+          history.open = true;
+        }
+        if (!active) {
+          if (
+            cancelFocusKind ||
+            focusedActivityControl?.classList.contains("themeScanCancel")
+          ) {
+            history.querySelector("summary").focus({ preventScroll: true });
+            cancelFocusKind = null;
+          } else focusedActivityControl?.focus({ preventScroll: true });
+        }
+        const latest = data;
+        const announcement = latest.Cancelling
+          ? "cancelling"
+          : latest.Running
+            ? "scanInProgress"
+            : latest.Cancelled
+              ? "scanCancelled"
+              : latest.StoppedReason || "scanCompleted";
+        if (
+          latest.RunId !== lastActivity?.RunId ||
+          latest.Running !== lastActivity?.Running ||
+          latest.Cancelling !== lastActivity?.Cancelling ||
+          latest.Failed > (lastActivity?.Failed || 0)
+        ) {
+          $("#themeActivityAnnouncement").textContent =
+            latest.FinishedAt || latest.Running
+              ? t(announcement) +
+                (latest.Failed
+                  ? " · " + t("failed") + ": " + latest.Failed
+                  : "")
+              : "";
+        }
+        if (latest.Failed > (lastActivity?.Failed || 0)) load(settings);
+        lastActivity = latest;
+      }
+      function renderActivity(container, data) {
+        if (!container.firstElementChild)
+          container.append($("#themeActivityTemplate").content.cloneNode(true));
+        const field = (name) => container.querySelector("." + name);
+        const cancel = field("themeScanCancel");
+        cancel.hidden = !data.Running;
+        cancel.disabled = !data.Running || data.Cancelling;
+        cancel.textContent = t(data.Cancelling ? "cancelling" : "cancelScan");
+        cancel.onclick = async () => {
+          if (document.activeElement === cancel) cancelFocusKind = data.Kind;
+          cancel.disabled = true;
+          try {
+            await request(data.Kind + "/cancel", { method: "POST" });
+            await progress();
+          } catch (e) {
+            cancelFocusKind = null;
+            showError(e);
+            cancel.disabled = false;
+          }
+        };
+        const activeItems = (data.ActiveItems || [])
+          .map((item) =>
+            t("scanItemStage", item.Name, t(data.ToolSetupStage || item.Stage)),
+          )
+          .join(" · ");
+        field("themeScanState").textContent = data.Cancelling
+          ? t("cancelling")
+          : data.Running
+            ? activeItems || t(data.ToolSetupStage || "preparingScan")
+            : t(
+                data.Cancelled
+                  ? "scanCancelled"
+                  : data.StoppedReason || "scanCompleted",
+              );
+        field("themeScanState").previousElementSibling.hidden = !data.Running;
+        field("themeScanDates").hidden = data.Running;
+        field("themeScanDates").textContent = data.FinishedAt
           ? t(
               "lastScanDates",
               new Date(data.StartedAt).toLocaleString(),
               new Date(data.FinishedAt).toLocaleString(),
+            ) +
+            " · " +
+            t(
+              "runDuration",
+              Math.max(
+                0,
+                (new Date(data.FinishedAt) - new Date(data.StartedAt)) / 60000,
+              ).toLocaleString(undefined, { maximumFractionDigits: 1 }),
             )
           : "";
-        const bar = $("#themeScanBar");
+        const bar = field("themeScanBar");
+        bar.setAttribute("aria-label", t("scanProgress"));
         bar.hidden = !data.Running;
-        if (data.Running && data.Processed === 0) bar.removeAttribute("value");
+        if (data.Running && !data.Prepared) bar.removeAttribute("value");
         else
           bar.value = data.Total
             ? Math.round((100 * data.Processed) / data.Total)
             : 0;
-        const activeItems = (data.ActiveItems || [])
-          .map((item) => t("scanItemStage", item.Name, t(item.Stage)))
-          .join(" · ");
-        const activity = [
-          data.ToolSetupStage && t(data.ToolSetupStage),
-          activeItems,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        $("#themeScanActivity").hidden = !data.Running || !activity;
-        $("#themeScanActivity").textContent = activity;
         let remaining;
         if (data.RemainingSeconds == null) remaining = t("estimating");
         else if (data.RemainingSeconds < 60) remaining = t("lessThanMinute");
         else if (data.RemainingSeconds < 120) remaining = t("aboutMinute");
         else
           remaining = t("aboutMinutes", Math.ceil(data.RemainingSeconds / 60));
-        const currentPosition = Math.min(
-          data.Total,
-          data.Processed + (data.ActiveItems?.length || 0),
-        );
-        $("#themeProgress").textContent =
-          (currentPosition
-            ? t("scanning", currentPosition, data.Total)
-            : t("preparingScan")) + (data.Total ? " · " + remaining : "");
+        field("themeProgress").textContent =
+          t("runCount", data.Processed, data.Total) +
+          (data.Running && data.Total ? " · " + remaining : "");
+        field("themeProgress").hidden = !data.Prepared;
         const counts = [
           ["added", data.Added],
+          ["updated", data.Updated],
           ["existing", data.AlreadyThemed],
           ["excluded", data.Excluded],
           ["noMatch", data.NoMatch],
           ["unsupported", data.Unsupported],
           ["failed", data.Failed],
         ];
-        $("#themeScanDetails").hidden = !data.Running && !data.FinishedAt;
-        $("#themeScanDetails").replaceChildren(
+        field("themeScanDetails").hidden = !data.Running && !data.FinishedAt;
+        field("themeScanDetails").replaceChildren(
           ...counts
             .filter(
               ([label, count]) =>
@@ -3174,27 +3318,65 @@
         const issues = data.Issues || [];
         const issuesKey =
           data.RunId + ":" + issues.length + ":" + issues.at(-1)?.At;
-        if (issuesKey !== lastIssuesKey) {
-          lastIssuesKey = issuesKey;
-          const container = $("#themeIssues");
-          container.hidden = issues.length === 0;
-          container.replaceChildren();
+        const issuesContainer = field("themeIssues");
+        if (issuesKey !== issuesContainer.dataset.key) {
+          issuesContainer.dataset.key = issuesKey;
+          issuesContainer.hidden = issues.length === 0;
+          if (issuesContainer.dataset.run !== data.RunId) {
+            issuesContainer.replaceChildren();
+            issuesContainer.dataset.run = data.RunId;
+          }
           if (issues.length) {
-            const heading = document.createElement("summary");
+            const heading =
+              issuesContainer.querySelector("summary") ||
+              document.createElement("summary");
+            heading.replaceChildren();
             heading.append(t("scanIssues") + " ");
             const count = document.createElement("span");
             count.textContent = "(" + issues.length + ")";
             heading.append(count);
-            const list = document.createElement("ul");
+            const list =
+              issuesContainer.querySelector("ul") ||
+              document.createElement("ul");
+            list.tabIndex = 0;
+            list.className = "themeScrollbar";
+            const scrollTop = list.scrollTop;
+            const keys = new Set(
+              issues.map((issue) => issue.At + ":" + issue.Name),
+            );
+            for (const item of list.children)
+              if (!keys.has(item.dataset.key)) item.remove();
             for (const issue of issues) {
+              const key = issue.At + ":" + issue.Name;
+              if ([...list.children].some((item) => item.dataset.key === key))
+                continue;
               const item = document.createElement("li");
+              item.dataset.key = key;
               item.className = issue.Failed
                 ? "themeIssue themeIssueFailed"
                 : "themeIssue";
               const header = document.createElement("div");
               header.className = "themeIssueHeader";
-              const name = document.createElement("strong");
+              const name = document.createElement(
+                issue.ItemId ? "button" : "strong",
+              );
               name.textContent = issue.Name;
+              if (issue.ItemId) {
+                name.type = "button";
+                name.className = "themeIssueLink";
+                name.onclick = async () => {
+                  $("#themeSearch").value = issue.Name;
+                  $("#themeSearchClear").hidden = false;
+                  current = 1;
+                  await load(rows);
+                  const row = [...$("#themeRows").children].find(
+                    (row) => row.dataset.itemId === issue.ItemId,
+                  );
+                  if (row) focusRow(issue.ItemId);
+                  else $("#themeSearch").focus();
+                  $("#themeDownloads").scrollIntoView({ block: "start" });
+                };
+              }
               const kind = document.createElement("span");
               kind.className = "themeIssueKind";
               kind.textContent = t(issue.Failed ? "failed" : "scanSkipped");
@@ -3248,7 +3430,8 @@
               }
               list.append(item);
             }
-            container.append(heading, list);
+            if (!heading.parentElement) issuesContainer.append(heading, list);
+            list.scrollTop = scrollTop;
           }
         }
       }
@@ -3379,14 +3562,6 @@
         } finally {
           button.disabled = false;
           button.textContent = t("retryDownloader");
-        }
-      };
-      $("#themeScanCancel").onclick = async () => {
-        try {
-          await request("scan/cancel", { method: "POST" });
-          await progress();
-        } catch (e) {
-          showError(e);
         }
       };
       $("#themeDeleteAll").onclick = async () => {
