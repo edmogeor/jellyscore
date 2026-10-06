@@ -160,6 +160,37 @@
       border-radius: 0.5rem;
       background: var(--jf-palette-background-default);
     }
+    @supports selector(::-webkit-scrollbar) {
+      :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea {
+        scrollbar-width: auto;
+        scrollbar-color: auto;
+      }
+      :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea::-webkit-scrollbar {
+        width: 12px;
+      }
+      :is(#themeSongsPage, #themeSongsAdd)
+        .themeScrollArea::-webkit-scrollbar-track {
+        margin-block: 4px;
+        background: transparent;
+      }
+      :is(#themeSongsPage, #themeSongsAdd)
+        .themeScrollArea::-webkit-scrollbar-thumb {
+        min-height: 2rem;
+        border: 3px solid transparent;
+        border-radius: 999px;
+        background: var(--jf-palette-text-disabled);
+        background-clip: padding-box;
+      }
+      :is(#themeSongsPage, #themeSongsAdd)
+        .themeScrollArea::-webkit-scrollbar-thumb:hover {
+        background-color: var(--jf-palette-text-secondary);
+      }
+      :is(#themeSongsPage, #themeSongsAdd)
+        .themeScrollArea::-webkit-scrollbar-button {
+        display: none;
+        height: 0;
+      }
+    }
     :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea:focus-visible {
       outline: 2px solid var(--jf-palette-primary-main);
       outline-offset: 2px;

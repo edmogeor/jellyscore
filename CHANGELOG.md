@@ -1,3 +1,9 @@
+## [0.3.2.0]
+
+### Improved
+
+- Inset the scrollbars in Manage Downloads and add-theme results, with rounded thumb ends, top and bottom clearance, and a subtle hover color.
+
 ## [0.3.1.0]
 
 ### Improved
