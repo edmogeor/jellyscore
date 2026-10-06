@@ -1,3 +1,9 @@
+## [0.3.3.0]
+
+### Fixed
+
+- Remove visible scrollbar tracks, borders, and shadows in Manage Downloads and add-theme results while keeping the inset, rounded thumbs.
+
 ## [0.3.2.0]
 
 ### Improved

@@ -168,10 +168,20 @@
       :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea::-webkit-scrollbar {
         width: 12px;
       }
+      :is(#themeSongsPage, #themeSongsAdd) .themeScrollArea::-webkit-scrollbar,
+      :is(#themeSongsPage, #themeSongsAdd)
+        .themeScrollArea::-webkit-scrollbar-track,
+      :is(#themeSongsPage, #themeSongsAdd)
+        .themeScrollArea::-webkit-scrollbar-track-piece,
+      :is(#themeSongsPage, #themeSongsAdd)
+        .themeScrollArea::-webkit-scrollbar-corner {
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+      }
       :is(#themeSongsPage, #themeSongsAdd)
         .themeScrollArea::-webkit-scrollbar-track {
         margin-block: 4px;
-        background: transparent;
       }
       :is(#themeSongsPage, #themeSongsAdd)
         .themeScrollArea::-webkit-scrollbar-thumb {
