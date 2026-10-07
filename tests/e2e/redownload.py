@@ -6,13 +6,10 @@ import re
 import subprocess
 import time
 
-from setup import request
+from setup import field, request
 
 
 def check_redownload(token, items, library_ids):
-    def field(data, name):
-        return data.get(name, data.get(name[0].upper() + name[1:]))
-
     def docker(*args, input=None):
         return subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", *args],
                               input=input, capture_output=True, check=True)

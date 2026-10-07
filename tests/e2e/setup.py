@@ -11,6 +11,10 @@ LIBRARIES = (("Films", "movies", "/media/movies"),
              ("Other films", "movies", "/media/unused"))
 
 
+def field(data, name):
+    return data.get(name, data.get(name[0].upper() + name[1:]))
+
+
 def request(method, path, body=None, token=None, timeout=5):
     auth = f'MediaBrowser Token="{token}"' if token else 'MediaBrowser Client="e2e", Device="e2e", DeviceId="e2e", Version="1"'
     command = ["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin",

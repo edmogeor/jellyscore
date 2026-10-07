@@ -1841,6 +1841,13 @@
         span.textContent = name;
         return span;
       };
+      function actionButton(action, iconName) {
+        const button = document.createElement("button", "emby-button");
+        button.className = "emby-button";
+        button.dataset.themeAction = t(action);
+        button.append(icon(iconName));
+        return button;
+      }
       const kindIcon = (kind) => {
         const span = icon(
           { Movie: "movie", Series: "tv", Collection: "collections_bookmark" }[
@@ -2116,15 +2123,12 @@
           queueBusy ||
           downloaderFailed ||
           !managedTotal;
-        redownloadAll.title = scanRunning
-          ? t("availableAfterScan")
-          : queueBusy
-            ? t("queueBusy")
-            : bulkBusy
-              ? t("working")
-              : downloaderFailed
-                ? t(downloaderFailureCode)
-                : t("redownloadAll");
+        if (scanRunning) redownloadAll.title = t("availableAfterScan");
+        else if (queueBusy) redownloadAll.title = t("queueBusy");
+        else if (bulkBusy) redownloadAll.title = t("working");
+        else if (downloaderFailed)
+          redownloadAll.title = t(downloaderFailureCode);
+        else redownloadAll.title = t("redownloadAll");
         $("#themeQueueBusy").textContent = t(
           queueBusy ? "queueBusy" : "scanHelp",
         );
@@ -3011,23 +3015,14 @@
           actions.className = "detailTableBodyCell";
           if (item.Pending) {
             if (!item.Processing) {
-              const retry = document.createElement("button", "emby-button");
-              retry.className = "emby-button";
-              retry.dataset.themeAction = t("tryAgain");
+              const retry = actionButton("tryAgain", "refresh");
               retry.dataset.requiresDownloader = "true";
-              retry.append(icon("refresh"));
               retry.onclick = async () => {
                 setBusy(t("queued"));
                 await queueProcessing(item, item.YouTubeUrl);
               };
-              const chooseSource = document.createElement(
-                "button",
-                "emby-button",
-              );
-              chooseSource.className = "emby-button";
-              chooseSource.dataset.themeAction = t("youTubeLink");
+              const chooseSource = actionButton("youTubeLink", "edit");
               chooseSource.dataset.requiresDownloader = "true";
-              chooseSource.append(icon("edit"));
               chooseSource.onclick = async () => {
                 try {
                   const youtubeUrl = await editSource(item);
@@ -3039,10 +3034,7 @@
                   showRowError(e);
                 }
               };
-              const dismiss = document.createElement("button", "emby-button");
-              dismiss.className = "emby-button";
-              dismiss.dataset.themeAction = t("removeFromList");
-              dismiss.append(icon("close"));
+              const dismiss = actionButton("removeFromList", "close");
               dismiss.onclick = async () => {
                 if (scanRunning || bulkBusy || row.dataset.busy === "true")
                   return;
@@ -3063,18 +3055,12 @@
             fragment.append(row);
             continue;
           }
-          const play = document.createElement("button", "emby-button");
-          play.className = "emby-button";
+          const play = actionButton("playTheme", "play_arrow");
           play.setAttribute("aria-label", t("playThemeFor", item.Name));
-          play.dataset.themeAction = t("playTheme");
           play.dataset.readOnly = "true";
-          play.append(icon("play_arrow"));
           play.onclick = () => playTheme(item).catch(showRowError);
-          const refresh = document.createElement("button", "emby-button");
-          refresh.className = "emby-button";
-          refresh.append(icon("refresh"));
+          const refresh = actionButton("refreshTheme", "refresh");
           refresh.setAttribute("aria-label", t("refreshThemeFor", item.Name));
-          refresh.dataset.themeAction = t("refreshTheme");
           refresh.dataset.themeDescription = "";
           refresh.dataset.requiresDownloader = "true";
           const queueReprocessing = (youtubeUrl = null) => {
@@ -3091,11 +3077,8 @@
             queueProcessing(item, youtubeUrl).catch(showRowError);
           };
           refresh.onclick = () => queueReprocessing();
-          const edit = document.createElement("button", "emby-button");
-          edit.className = "emby-button";
-          edit.append(icon("edit"));
+          const edit = actionButton("editTheme", "edit");
           edit.setAttribute("aria-label", t("editThemeFor", item.Name));
-          edit.dataset.themeAction = t("editTheme");
           edit.dataset.requiresDownloader = "true";
           edit.onclick = async () => {
             if (
@@ -3120,11 +3103,8 @@
               showRowError(e);
             }
           };
-          const remove = document.createElement("button", "emby-button");
-          remove.className = "emby-button";
-          remove.append(icon("delete"));
+          const remove = actionButton("deleteTheme", "delete");
           remove.setAttribute("aria-label", t("deleteThemeFor", item.Name));
-          remove.dataset.themeAction = t("deleteTheme");
           remove.dataset.destructive = "true";
           remove.onclick = async () => {
             if (scanRunning || bulkBusy || row.dataset.busy === "true") return;
@@ -3163,6 +3143,12 @@
           element.scrollTop = top;
         }
         if (focusedItem && !confirming) focusRow(focusedItem);
+      }
+      function activityState(data) {
+        if (data.Cancelling) return "cancelling";
+        if (data.Running) return "scanInProgress";
+        if (data.Cancelled) return "scanCancelled";
+        return data.StoppedReason || "scanCompleted";
       }
       async function progress() {
         const activityData = await request("activity");
@@ -3225,30 +3211,22 @@
             cancelFocusKind = null;
           } else focusedActivityControl?.focus({ preventScroll: true });
         }
-        const latest = data;
-        const announcement = latest.Cancelling
-          ? "cancelling"
-          : latest.Running
-            ? "scanInProgress"
-            : latest.Cancelled
-              ? "scanCancelled"
-              : latest.StoppedReason || "scanCompleted";
         if (
-          latest.RunId !== lastActivity?.RunId ||
-          latest.Running !== lastActivity?.Running ||
-          latest.Cancelling !== lastActivity?.Cancelling ||
-          latest.Failed > (lastActivity?.Failed || 0)
+          data.RunId !== lastActivity?.RunId ||
+          data.Running !== lastActivity?.Running ||
+          data.Cancelling !== lastActivity?.Cancelling ||
+          data.Failed > (lastActivity?.Failed || 0)
         ) {
-          $("#themeActivityAnnouncement").textContent =
-            latest.FinishedAt || latest.Running
-              ? t(announcement) +
-                (latest.Failed
-                  ? " · " + t("failed") + ": " + latest.Failed
-                  : "")
-              : "";
+          let announcement = "";
+          if (data.FinishedAt || data.Running) {
+            announcement = t(activityState(data));
+            if (data.Failed)
+              announcement += " · " + t("failed") + ": " + data.Failed;
+          }
+          $("#themeActivityAnnouncement").textContent = announcement;
         }
-        if (latest.Failed > (lastActivity?.Failed || 0)) load(settings);
-        lastActivity = latest;
+        if (data.Failed > (lastActivity?.Failed || 0)) load(settings);
+        lastActivity = data;
       }
       function renderActivity(container, data) {
         if (!container.firstElementChild)
@@ -3275,32 +3253,30 @@
             t("scanItemStage", item.Name, t(data.ToolSetupStage || item.Stage)),
           )
           .join(" · ");
-        field("themeScanState").textContent = data.Cancelling
-          ? t("cancelling")
-          : data.Running
-            ? activeItems || t(data.ToolSetupStage || "preparingScan")
-            : t(
-                data.Cancelled
-                  ? "scanCancelled"
-                  : data.StoppedReason || "scanCompleted",
-              );
+        let state = t(activityState(data));
+        if (data.Running && !data.Cancelling)
+          state = activeItems || t(data.ToolSetupStage || "preparingScan");
+        field("themeScanState").textContent = state;
         field("themeScanState").previousElementSibling.hidden = !data.Running;
         field("themeScanDates").hidden = data.Running;
-        field("themeScanDates").textContent = data.FinishedAt
-          ? t(
+        let dates = "";
+        if (data.FinishedAt) {
+          const started = new Date(data.StartedAt);
+          const finished = new Date(data.FinishedAt);
+          const minutes = Math.max(0, (finished - started) / 60000);
+          dates =
+            t(
               "lastScanDates",
-              new Date(data.StartedAt).toLocaleString(),
-              new Date(data.FinishedAt).toLocaleString(),
+              started.toLocaleString(),
+              finished.toLocaleString(),
             ) +
             " · " +
             t(
               "runDuration",
-              Math.max(
-                0,
-                (new Date(data.FinishedAt) - new Date(data.StartedAt)) / 60000,
-              ).toLocaleString(undefined, { maximumFractionDigits: 1 }),
-            )
-          : "";
+              minutes.toLocaleString(undefined, { maximumFractionDigits: 1 }),
+            );
+        }
+        field("themeScanDates").textContent = dates;
         const bar = field("themeScanBar");
         bar.setAttribute("aria-label", t("scanProgress"));
         bar.hidden = !data.Running;

@@ -295,6 +295,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 });
             }
             var path = Path.Combine(folder, JellyScoreConstants.ThemeFile);
+            Action? onDownloaded = reportStage is null ? null : () => reportStage("stageProcessing");
             async Task<ThemeResult> Install(string temporary, Choice source, string? sourceUrl = null)
             {
                 ct.ThrowIfCancellationRequested();
@@ -323,48 +324,40 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 Refresh(item);
                 return new(result);
             }
-            if (redownload)
+            var saved = redownload ? existing ?? throw new InvalidOperationException("No managed theme to refresh.") : null;
+            if (saved is not null && saved.VideoId.StartsWith("tvdb:", StringComparison.Ordinal))
             {
-                var saved = existing ?? throw new InvalidOperationException("No managed theme to refresh.");
                 var temporary = Path.Combine(folder, ".theme-" + Guid.NewGuid().ToString("N") + ".mp3");
                 try
                 {
                     var source = new Choice(new Video(saved.VideoId, saved.VideoTitle, "", "", null), saved.Recording, saved.Score, saved.Evidence);
-                    if (saved.VideoId.StartsWith("tvdb:", StringComparison.Ordinal))
-                    {
-                        if (!Uri.TryCreate(saved.SourceUrl, UriKind.Absolute, out var savedUrl))
-                            throw new DownloadFailure("The saved theme source is missing or unsupported.");
-                        reportStage?.Invoke("stageDownloading");
-                        await Audio.ConvertUrl(savedUrl, temporary, encoder, loudness, ct,
-                            reportStage is null ? null : () => reportStage("stageProcessing"));
-                    }
-                    else
-                    {
-                        var videoId = YouTube.VideoId(saved.SourceUrl ?? "https://www.youtube.com/watch?v=" + saved.VideoId);
-                        if (videoId is null || videoId != saved.VideoId)
-                            throw new DownloadFailure("The saved theme source is missing or unsupported.");
-                        reportStage?.Invoke("stagePreparing");
-                        var original = await YouTube.ManualChoice(videoId, item is BoxSet ? franchise! : work, ct);
-                        source = source with { Video = original.Video with { Title = saved.VideoTitle } };
-                        reportStage?.Invoke("stageDownloading");
-                        await Audio.Convert(source, temporary, encoder, loudness, ct,
-                            reportStage is null ? null : () => reportStage("stageProcessing"));
-                    }
+                    if (!Uri.TryCreate(saved.SourceUrl, UriKind.Absolute, out var savedUrl))
+                        throw new DownloadFailure("The saved theme source is missing or unsupported.");
+                    reportStage?.Invoke("stageDownloading");
+                    await Audio.ConvertUrl(savedUrl, temporary, encoder, loudness, ct, onDownloaded);
                     return await Install(temporary, source, saved.SourceUrl);
                 }
                 finally { if (File.Exists(temporary)) File.Delete(temporary); }
             }
-            if (manualVideoId is not null)
+            if (redownload || manualVideoId is not null)
             {
-                reportStage?.Invoke("stageSearching");
-                var manual = await YouTube.ManualChoice(manualVideoId, item is BoxSet ? franchise! : work, ct);
+                var videoId = manualVideoId;
+                if (saved is not null)
+                {
+                    videoId = YouTube.VideoId(saved.SourceUrl ?? YouTube.VideoUrl(saved.VideoId));
+                    if (videoId is null || videoId != saved.VideoId)
+                        throw new DownloadFailure("The saved theme source is missing or unsupported.");
+                }
+                reportStage?.Invoke(redownload ? "stagePreparing" : "stageSearching");
+                var source = await YouTube.ManualChoice(videoId!, item is BoxSet ? franchise! : work, ct);
+                if (saved is not null) source = source with { Video = source.Video with { Title = saved.VideoTitle },
+                    Recording = saved.Recording, Score = saved.Score, Evidence = saved.Evidence };
                 var temporary = Path.Combine(folder, ".theme-" + Guid.NewGuid().ToString("N") + ".mp3");
                 try
                 {
                     reportStage?.Invoke("stageDownloading");
-                    await Audio.Convert(manual, temporary, encoder, loudness, ct,
-                        reportStage is null ? null : () => reportStage("stageProcessing"));
-                    return await Install(temporary, manual);
+                    await Audio.Convert(source, temporary, encoder, loudness, ct, onDownloaded);
+                    return await Install(temporary, source, saved?.SourceUrl);
                 }
                 finally { if (File.Exists(temporary)) File.Delete(temporary); }
             }
@@ -378,8 +371,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                     reportStage?.Invoke("stageDownloading");
                     try
                     {
-                        await Audio.ConvertUrl(url, temporary, encoder, loudness, ct,
-                            reportStage is null ? null : () => reportStage("stageProcessing"));
+                        await Audio.ConvertUrl(url, temporary, encoder, loudness, ct, onDownloaded);
                         converted = true;
                     }
                     catch (Exception e) when (!ct.IsCancellationRequested && e is IOException or HttpRequestException or SocketException or JsonException or OperationCanceledException or KeyNotFoundException or InvalidOperationException)
@@ -460,8 +452,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 try
                 {
                     reportStage?.Invoke("stageDownloading");
-                    try { await Audio.Convert(choice, temporary, encoder, loudness, ct,
-                        reportStage is null ? null : () => reportStage("stageProcessing")); }
+                    try { await Audio.Convert(choice, temporary, encoder, loudness, ct, onDownloaded); }
                     catch (DownloadFailure) when (sourceAttempt == 0)
                     {
                         excludedIds.Add(choice.Video.Id);

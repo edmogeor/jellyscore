@@ -85,14 +85,14 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     private static object DownloadRow(ManagedTheme theme, ThemeProcessingJob? job)
     {
         var source = theme.SourceUrl;
-        if (source is null && !string.IsNullOrEmpty(theme.VideoId)) source = "https://www.youtube.com/watch?v=" + theme.VideoId;
+        if (source is null && !string.IsNullOrEmpty(theme.VideoId)) source = YouTube.VideoUrl(theme.VideoId);
         var videoId = theme.VideoId.StartsWith("tvdb:", StringComparison.Ordinal) ? null : YouTube.VideoId(source);
         var stage = job?.Stage;
         if (job is { Processing: true, Stage: not "queued" }) stage = YouTube.ToolSetupStage ?? job.Stage;
         return new
         {
             theme.ItemId, theme.Name, theme.Kind, theme.Year, theme.Library, theme.Path, theme.VideoTitle, theme.Score, theme.Evidence, theme.Date,
-            Source = source, YouTubeUrl = videoId is null ? null : "https://www.youtube.com/watch?v=" + videoId,
+            Source = source, YouTubeUrl = videoId is null ? null : YouTube.VideoUrl(videoId),
             Pending = job is { Replacement: false }, Processing = job?.Processing ?? false,
             Stage = stage, Code = job?.Code, Result = job?.Result,
             Status = job is { Replacement: false } ? job.Stage : ThemeService.Status(theme)
@@ -131,7 +131,10 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
             var lastScan = scan.LastStatus;
             var lastQueue = processing.LastStatus;
             var last = (lastScan.FinishedAt ?? DateTimeOffset.MinValue) >= (lastQueue.FinishedAt ?? DateTimeOffset.MinValue) ? lastScan : lastQueue;
-            return new { Current = status.Running ? status.Snapshot() : queue.Running ? queue : null, Last = last.Snapshot() };
+            ScanStatus? current = null;
+            if (status.Running) current = status.Snapshot();
+            else if (queue.Running) current = queue;
+            return new { Current = current, Last = last.Snapshot() };
         }
     }
 
@@ -170,7 +173,7 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
         {
             var videoId = YouTube.VideoId(request.YouTubeUrl);
             if (videoId is null) return BadRequest(new { Code = "invalidYouTubeUrl" });
-            youtubeUrl = "https://www.youtube.com/watch?v=" + videoId;
+            youtubeUrl = YouTube.VideoUrl(videoId);
         }
         return Enqueue(id, youtubeUrl, replacement: false);
     }
@@ -187,7 +190,7 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     {
         var videoId = YouTube.VideoId(request.YouTubeUrl);
         if (videoId is null) return BadRequest(new { Code = "invalidYouTubeUrl" });
-        return Enqueue(id, "https://www.youtube.com/watch?v=" + videoId, replacement: true);
+        return Enqueue(id, YouTube.VideoUrl(videoId), replacement: true);
     }
 
     private IActionResult Enqueue(Guid id, string? youtubeUrl, bool replacement)

@@ -170,7 +170,13 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
             }
             catch (Exception e)
             {
-                var code = ThemeService.ErrorCode(e, job.Redownload ? "redownloadFailed" : job.Replacement ? "refreshFailed" : "requestFailed");
+                var fallback = job switch
+                {
+                    { Redownload: true } => "redownloadFailed",
+                    { Replacement: true } => "refreshFailed",
+                    _ => "requestFailed"
+                };
+                var code = ThemeService.ErrorCode(e, fallback);
                 var diagnostic = $"Queued theme processing failed for {job.Theme.Name} ({job.Theme.ItemId}): {e.Message}";
                 lock (_gate)
                 {
@@ -452,7 +458,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                     lock (status)
                     {
                         status.Unsupported++;
-                        AddIssue(status, new ScanIssue(item.Name, "scanUnsupported", false, DateTimeOffset.UtcNow, null, item.Id));
+                        status.AddIssue(new ScanIssue(item.Name, "scanUnsupported", false, DateTimeOffset.UtcNow, null, item.Id));
                     }
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -462,7 +468,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                     lock (status)
                     {
                         status.StoppedReason = "scanRateLimited";
-                        AddIssue(status, new ScanIssue(item.Name, "scanRateLimited", true, DateTimeOffset.UtcNow, diagnostic, item.Id));
+                        status.AddIssue(new ScanIssue(item.Name, "scanRateLimited", true, DateTimeOffset.UtcNow, diagnostic, item.Id));
                     }
                     logger.LogWarning("Theme scan paused for {Name} ({ItemId}): {Message}", item.Name, item.Id, e.Message);
                     throw;
@@ -473,7 +479,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
                     lock (status)
                     {
                         status.Failed++;
-                        AddIssue(status, new ScanIssue(item.Name, e switch
+                        status.AddIssue(new ScanIssue(item.Name, e switch
                         {
                             SearchFailure => "searchFailed",
                             DownloadFailure => "downloadFailed",
@@ -503,6 +509,4 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
         finally { lock (status) { status.Finish(); _lastStatus = status.Snapshot(); } }
     }
 
-    private static void AddIssue(ScanStatus status, ScanIssue issue) =>
-        status.AddIssue(issue);
 }

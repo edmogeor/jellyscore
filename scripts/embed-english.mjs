@@ -5,6 +5,13 @@ import { buildSync, transformSync } from "esbuild";
 
 const [template, dictionary, output] = process.argv.slice(2);
 const strings = JSON.parse(readFileSync(dictionary, "utf8"));
+const htmlEntities = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
 let html = readFileSync(template, "utf8").replace(
   /\{\{(\w+)\}\}/g,
   (_, key) => {
@@ -12,14 +19,7 @@ let html = readFileSync(template, "utf8").replace(
       throw new Error(`Missing English string: ${key}`);
     return strings[key].replace(
       /[&<>"']/g,
-      (character) =>
-        ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        })[character],
+      (character) => htmlEntities[character],
     );
   },
 );

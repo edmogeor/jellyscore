@@ -8,7 +8,10 @@ using System.IO.Compression;
 namespace Jellyfin.Plugin.JellyScore;
 
 public sealed record Work(string Title, string? OriginalTitle, int? Year, bool Series, bool NoCompetingEdition = false,
-    bool Franchise = false, IReadOnlyList<string>? Installments = null);
+    bool Franchise = false, IReadOnlyList<string>? Installments = null)
+{
+    internal IEnumerable<string> Titles => new[] { Title, OriginalTitle }.OfType<string>().Where(title => !string.IsNullOrWhiteSpace(title));
+}
 public sealed record Video(string Id, string Title, string Description, string Channel, int? Seconds,
     string? Album = null, string? Track = null, string? Artist = null, int? ReleaseYear = null, DateOnly? UploadDate = null);
 public sealed record Choice(Video Video, string Recording, int Score, string Evidence);
@@ -71,9 +74,7 @@ public sealed class YouTube
             var version = (await File.ReadAllTextAsync(Path.Combine(directory, JellyScoreConstants.DownloaderVersionFile), ct)).Trim();
             var asset = DownloaderName(OperatingSystem.IsWindows(), OperatingSystem.IsMacOS(), RuntimeInformation.OSArchitecture,
                 RuntimeInformation.RuntimeIdentifier.Contains("musl", StringComparison.OrdinalIgnoreCase));
-            var checksum = File.ReadLines(Path.Combine(directory, JellyScoreConstants.DownloaderChecksumsFile))
-                .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                .FirstOrDefault(parts => parts.Length == 2 && parts[1] == asset)?[0];
+            var checksum = ReleaseChecksum(directory, JellyScoreConstants.DownloaderChecksumsFile, asset);
             if (checksum is null || !Regex.IsMatch(version, "^[a-zA-Z0-9._-]+$") || !Regex.IsMatch(checksum, "^[a-fA-F0-9]{64}$"))
                 throw new SearchFailure("Plugin package has no valid yt-dlp release or checksum for this platform.");
             var path = Path.Combine(Plugin.Instance.DownloaderFolder, version, asset);
@@ -147,9 +148,7 @@ public sealed class YouTube
             if (asset is null) throw new SearchFailure("A supported Deno or Node.js runtime is required on this server platform.");
             var directory = Path.GetDirectoryName(typeof(YouTube).Assembly.Location)!;
             var version = (await File.ReadAllTextAsync(Path.Combine(directory, JellyScoreConstants.RuntimeVersionFile), ct)).Trim();
-            var checksum = File.ReadLines(Path.Combine(directory, JellyScoreConstants.RuntimeChecksumsFile))
-                .Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                .FirstOrDefault(parts => parts.Length == 2 && parts[1] == asset)?[0];
+            var checksum = ReleaseChecksum(directory, JellyScoreConstants.RuntimeChecksumsFile, asset);
             if (checksum is null || !Regex.IsMatch(version, "^v[0-9.]+$") || !Regex.IsMatch(checksum, "^[a-fA-F0-9]{64}$"))
                 throw new SearchFailure("Plugin package has no valid Deno release or checksum for this platform.");
             var folder = Path.Combine(Plugin.Instance.DownloaderFolder, version);
@@ -178,6 +177,10 @@ public sealed class YouTube
         }
         finally { RuntimeGate.Release(); }
     }
+
+    private static string? ReleaseChecksum(string directory, string fileName, string asset) =>
+        File.ReadLines(Path.Combine(directory, fileName)).Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .FirstOrDefault(parts => parts.Length == 2 && parts[1] == asset)?[0];
 
     // ReSharper disable once MemberCanBePrivate.Global
     public static async Task<string> EnsureDownloader(string path, string checksum, Func<CancellationToken, Task<Stream>> download, CancellationToken ct)
@@ -218,8 +221,7 @@ public sealed class YouTube
 
     public async Task<IReadOnlyList<Video>> Search(Work work, IReadOnlySet<string> excludedIds, CancellationToken ct, bool nextPage = false)
     {
-        var titles = new[] { work.Title, work.OriginalTitle }.Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+        var titles = work.Titles.Distinct(StringComparer.OrdinalIgnoreCase);
         var videos = new Dictionary<string, Video>();
         foreach (var title in titles)
         {
@@ -288,6 +290,8 @@ public sealed class YouTube
         return videos;
     }
 
+    internal static string VideoUrl(string id) => "https://www.youtube.com/watch?v=" + id;
+
     internal static string? VideoId(string? url)
     {
         if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http") ||
@@ -322,7 +326,7 @@ public sealed class YouTube
     private static async Task<Video> Recheck(string id, CancellationToken ct)
     {
         if (!Regex.IsMatch(id, "^[a-zA-Z0-9_-]{11}$")) throw new SearchFailure("Invalid source video ID.");
-        var output = await Tool(["--no-warnings", "--skip-download", "--dump-json", "--no-playlist", "https://www.youtube.com/watch?v=" + id], ct);
+        var output = await Tool(["--no-warnings", "--skip-download", "--dump-json", "--no-playlist", VideoUrl(id)], ct);
         using var doc = JsonDocument.Parse(output);
         return Parse(doc.RootElement);
     }
@@ -335,7 +339,7 @@ public sealed class YouTube
             {
                 await RunTool(["--no-playlist", "--no-progress", "--no-part", "--no-continue", "--retries", $"{JellyScoreConstants.DownloaderRetries}",
                     "--socket-timeout", $"{JellyScoreConstants.DownloaderSocketTimeoutSeconds}", "-f", "bestaudio", "--max-filesize", JellyScoreConstants.DownloaderMaximumFileSize,
-                    "-o", path, "https://www.youtube.com/watch?v=" + id], true, ct);
+                    "-o", path, VideoUrl(id)], true, ct);
                 return;
             }
             catch (IOException) when (attempt < JellyScoreConstants.ToolAttempts - 1)
@@ -471,8 +475,7 @@ public static partial class Matcher
     private static partial Regex SeriesEdition();
 
     private static string Normal(string value) => Regex.Replace(value.ToLowerInvariant(), @"[^\p{L}\p{N}]+", " ").Trim();
-    private static bool SameWorkTitle(Work work, string title) => new[] { work.Title, work.OriginalTitle }
-        .Where(s => !string.IsNullOrWhiteSpace(s)).Any(s => Normal(s!) == Normal(title));
+    private static bool SameWorkTitle(Work work, string title) => work.Titles.Any(workTitle => Normal(workTitle) == Normal(title));
     public static bool NoCompetingEdition(Work work, string id, IReadOnlyList<(string? Id, string? Title, int? Year)> films,
         IReadOnlyList<(string? Id, string? Title, int? Year)> shows)
     {
@@ -490,8 +493,8 @@ public static partial class Matcher
     {
         if (!work.Series || !Regex.IsMatch(video.Title, @"\btheme\b", RegexOptions.IgnoreCase)) return false;
         var remainder = " " + Normal(video.Title) + " ";
-        foreach (var title in new[] { work.Title, work.OriginalTitle }.Where(s => !string.IsNullOrWhiteSpace(s)))
-            remainder = remainder.Replace(" " + Normal(title!) + " ", " ", StringComparison.Ordinal);
+        foreach (var title in work.Titles)
+            remainder = remainder.Replace(" " + Normal(title) + " ", " ", StringComparison.Ordinal);
         remainder = Regex.Replace(remainder, @"\b(?:\d+|official|original|main|theme|song|opening|intro|title|credits|soundtrack|score|ost|tv|television|series|season)\b", " ");
         return remainder.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 3;
     }
@@ -499,16 +502,16 @@ public static partial class Matcher
     private static bool LinkedSeriesTheme(Work work, string description)
     {
         var text = Normal(description);
-        return new[] { work.Title, work.OriginalTitle }.Where(s => !string.IsNullOrWhiteSpace(s)).Any(title =>
-            Regex.IsMatch(text, $@"\b(?:main )?theme (?:of|for) (?:the )?(?:tv show|tv series|television series) {Regex.Escape(Normal(title!))}\b"));
+        return work.Titles.Any(title =>
+            Regex.IsMatch(text, $@"\b(?:main )?theme (?:of|for) (?:the )?(?:tv show|tv series|television series) {Regex.Escape(Normal(title))}\b"));
     }
 
     private static int? LinkedYear(Work work, string description)
     {
         var text = Normal(description);
-        foreach (var title in new[] { work.Title, work.OriginalTitle }.Where(s => !string.IsNullOrWhiteSpace(s)))
+        foreach (var title in work.Titles)
         {
-            var year = Regex.Match(text, $@"(?:^| ){Regex.Escape(Normal(title!))} (19\d{{2}}|20\d{{2}})(?: |$)");
+            var year = Regex.Match(text, $@"(?:^| ){Regex.Escape(Normal(title))} (19\d{{2}}|20\d{{2}})(?: |$)");
             if (year.Success) return int.Parse(year.Groups[1].Value);
         }
         return null;
@@ -531,7 +534,7 @@ public static partial class Matcher
         var score = 0;
         void Add(int points, string source) { score += points; evidence.Add($"{source} {points:+#;-#;0}"); }
 
-        if (new[] { work.Title, work.OriginalTitle }.Where(s => !string.IsNullOrWhiteSpace(s)).Any(s => Contains(video.Title, s!))) Add(JellyScoreConstants.WorkTitlePoints, "Work in title");
+        if (work.Titles.Any(title => Contains(video.Title, title))) Add(JellyScoreConstants.WorkTitlePoints, "Work in title");
         else
         {
             var words = Normal(work.Title).Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= JellyScoreConstants.PartialTitleWordMinimumLength);
@@ -598,8 +601,8 @@ public static partial class Matcher
         { reason = "Cover, remix, sequel, or other excluded format"; return null; }
         if (Sequel().IsMatch(identityText) && !Sequel().IsMatch(work.Title))
         { reason = "Soundtrack belongs to a different sequel"; return null; }
-        var workTitles = new[] { work.Title, work.OriginalTitle }.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
-        if (!workTitles.Any(s => Contains(identityText, s!) || Contains(video.Description, s!)))
+        var workTitles = work.Titles.ToArray();
+        if (!workTitles.Any(title => Contains(identityText, title) || Contains(video.Description, title)))
         { reason = "Title or description does not identify this work"; return null; }
         if (work.Franchise && !Regex.IsMatch(Normal(title),
             $@"(?:^| ){Regex.Escape(Normal(work.Title))} (?:official |original |main |collection |film |movie |soundtrack |ost |score |music |song )*(?:theme|main title|opening|intro)\b") &&
@@ -616,7 +619,7 @@ public static partial class Matcher
         // Unknown edition/year is deliberately insufficient for ambiguous remakes.
         if (work.Year is not null && video.ReleaseYear is null && linkedYear is null && !Years().IsMatch(identityText) &&
             Normal(work.Title).Split(' ').Length <= JellyScoreConstants.AmbiguousTitleWordLimit &&
-            !(work.NoCompetingEdition && workTitles.Any(s => Contains(identityText, s!))) &&
+            !(work.NoCompetingEdition && workTitles.Any(title => Contains(identityText, title))) &&
             !(Sequel().IsMatch(work.Title) && Contains(title, work.Title)))
         { reason = "Release year missing for an ambiguous title"; return null; }
         var albumMatches = Contains(album, work.Title) || work.OriginalTitle is not null && Contains(album, work.OriginalTitle);
@@ -668,7 +671,7 @@ public static partial class Matcher
             return "Eligible recordings were found";
         }
         if (reasons.Count == 0) { code = "reasonNoResults"; return "No search results passed the title and duration shortlist"; }
-        var groups = reasons.GroupBy(reason => reason).OrderByDescending(group => group.Count()).ToArray();
+        var groups = reasons.GroupBy(reason => reason).OrderByDescending(group => group.Count()).Take(3).ToArray();
         code = groups[0].Key switch
         {
             "Duration is missing or outside the theme range" => "reasonDuration",
@@ -681,7 +684,7 @@ public static partial class Matcher
             "Ranking score is too low" => "reasonLowScore",
             _ => "reasonNoMatch"
         };
-        var counts = groups.Take(3).Select(group => $"{group.Count()} {group.Key}");
+        var counts = groups.Select(group => $"{group.Count()} {group.Key}");
         return $"Rejected {reasons.Count} candidates: {string.Join("; ", counts)}";
     }
 
@@ -702,6 +705,6 @@ public static partial class Matcher
             if (mainThemes.Length > 0) choices = mainThemes;
             else if (closingThemes.Length > 0) choices = closingThemes;
         }
-        return choices.OrderByDescending(c => c.Score).FirstOrDefault();
+        return choices.MaxBy(choice => choice.Score);
     }
 }

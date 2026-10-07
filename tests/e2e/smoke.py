@@ -5,13 +5,9 @@ import subprocess
 import time
 import uuid
 from datetime import datetime
-from setup import request, wizard, libraries
+from setup import field, request, wizard, libraries
 
 PLUGIN = "129e8a8b-87f1-48d3-802b-7dd151d72920"
-
-
-def field(data, name):
-    return data.get(name, data.get(name[0].upper() + name[1:]))
 
 
 def add_until(token, item_id, youtube_url=None, check_scheduled=False):
