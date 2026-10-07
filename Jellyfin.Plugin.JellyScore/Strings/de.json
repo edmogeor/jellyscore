@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Alle Titelmusiken erneut herunterladen",
+  "confirmRedownloadAll": "Alle verwalteten Titelmusiken erneut von ihren gespeicherten Quellen herunterladen und mit den aktuell gespeicherten Audioeinstellungen verarbeiten? Dies umfasst alle Seiten und Suchergebnisse. Vorhandene Titelmusiken bleiben erhalten, wenn der Austausch fehlschlägt.",
+  "redownloadQueued": "Für erneuten Download vorgemerkt: {0}.",
+  "redownloadFailed": "Die Titelmusik konnte nicht erneut heruntergeladen werden. Die vorhandene Datei blieb unverändert. Prüfen Sie die Jellyfin-Protokolle und versuchen Sie es erneut.",
   "activity": "Aktivität",
   "lastRun": "Letzter Durchlauf",
   "cancelling": "Wird abgebrochen…",
@@ -62,7 +66,7 @@
   "errorCopied": "Kopiert",
   "copyErrorFailed": "Fehler konnte nicht kopiert werden. Erneut versuchen.",
   "themeVolume": "Ziel-Lautheit (LUFS)",
-  "themeVolumeHelp": "Standard: −30 LUFS. Stärker negative Werte bedeuten leisere Titelmusik. Änderungen gelten für neue und aktualisierte Titelmusik, nicht für vorhandene Downloads.",
+  "themeVolumeHelp": "Standard: −30 LUFS. Stärker negative Werte bedeuten leisere Titelmusik. Speichern Sie die Einstellungen und verwenden Sie Alle Titelmusiken erneut herunterladen, um vorhandene Downloads zu aktualisieren.",
   "cookiesLabel": "YouTube-Cookies (optional)",
   "cookiesHelp": "Fügen Sie den Inhalt Ihrer cookies.txt-Datei ein. Die Nutzung eines Kontos kann zu dessen Sperrung führen.",
   "cookiesGuide": "YouTube-Cookies exportieren",

@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Scarica di nuovo tutti i temi",
+  "confirmRedownloadAll": "Scaricare di nuovo tutti i temi gestiti dalle fonti salvate ed elaborarli con le impostazioni audio attualmente salvate? Sono incluse tutte le pagine e i risultati di ricerca. I temi esistenti vengono conservati se la sostituzione non riesce.",
+  "redownloadQueued": "In coda per un nuovo download: {0}.",
+  "redownloadFailed": "Impossibile scaricare di nuovo il tema. Il file esistente non è stato modificato. Controlla i log di Jellyfin e riprova.",
   "activity": "Attività",
   "lastRun": "Ultima esecuzione",
   "cancelling": "Annullamento…",
@@ -62,7 +66,7 @@
   "errorCopied": "Copiato",
   "copyErrorFailed": "Impossibile copiare l'errore. Riprova.",
   "themeVolume": "Loudness desiderata (LUFS)",
-  "themeVolumeHelp": "Valore predefinito: −30 LUFS. Valori più negativi producono un suono più basso. Le modifiche si applicano ai temi nuovi e aggiornati, non ai download esistenti.",
+  "themeVolumeHelp": "Valore predefinito: −30 LUFS. Valori più negativi producono un suono più basso. Salva le impostazioni e usa Scarica di nuovo tutti i temi per aggiornare i download esistenti.",
   "cookiesLabel": "Cookie di YouTube (facoltativi)",
   "cookiesHelp": "Incolla il contenuto del file cookies.txt. L'uso di un account può comportarne la sospensione.",
   "cookiesGuide": "Come esportare i cookie di YouTube",

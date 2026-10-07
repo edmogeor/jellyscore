@@ -44,6 +44,12 @@ public static class TvThemeSource
         if (position < pathStart || position < 0 || template.IndexOf(IdPlaceholder, position + IdPlaceholder.Length, StringComparison.Ordinal) >= 0 ||
             template.Replace(IdPlaceholder, "", StringComparison.Ordinal).IndexOfAny(['{', '}']) >= 0 ||
             !Uri.TryCreate(template.Replace(IdPlaceholder, "123456", StringComparison.Ordinal), UriKind.Absolute, out var uri)) return false;
+        return ValidUrl(uri.AbsoluteUri);
+    }
+
+    internal static bool ValidUrl(string url)
+    {
+        if (url.Length > JellyScoreConstants.MaximumThemeUrlLength || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
         return uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort && uri.UserInfo.Length == 0 &&
             uri.Query.Length == 0 && uri.Fragment.Length == 0 && uri.Host.Length > 0 &&
             !uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) &&
@@ -57,6 +63,7 @@ public static class TvThemeSource
 
     public static async Task Download(Uri url, string destination, CancellationToken ct)
     {
+        if (!ValidUrl(url.AbsoluteUri)) throw new DownloadFailure("The saved TV theme source URL is not allowed.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(JellyScoreConstants.ThemeSourceTimeoutSeconds));
         using var response = await Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token);

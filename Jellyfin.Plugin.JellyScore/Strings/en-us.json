@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Redownload all themes",
+  "confirmRedownloadAll": "Redownload all managed themes from their saved sources and reprocess them with your current saved audio settings? This includes all pages and search results. Existing themes stay in place if replacement fails.",
+  "redownloadQueued": "Queued for redownload: {0}.",
+  "redownloadFailed": "Could not redownload the theme. The existing file was left untouched. Check the Jellyfin logs and try again.",
   "activity": "Activity",
   "lastRun": "Last run",
   "cancelling": "Cancelling…",
@@ -55,7 +59,7 @@
   "minimumMatchStrength": "Minimum match strength (0–100)",
   "matchStrengthHelp": "Default: 50. Higher values require stronger matching evidence. Changes apply to future searches.",
   "themeVolume": "Target loudness (LUFS)",
-  "themeVolumeHelp": "Default: −30 LUFS. More negative values are quieter. Changes apply to new and refreshed themes, not existing downloads.",
+  "themeVolumeHelp": "Default: −30 LUFS. More negative values are quieter. Save your settings, then use Redownload all themes to update existing downloads.",
   "cookiesLabel": "YouTube cookies (optional)",
   "cookiesHelp": "Paste your cookies.txt contents. Using an account may put it at risk of suspension.",
   "cookiesGuide": "How to export YouTube cookies",

@@ -97,7 +97,7 @@ def scan_until(token, expected=None, expect_current=False):
                 for method, path, body in [("POST", target + "/add", {}), ("POST", target + "/refresh", None),
                                            ("POST", target + "/edit", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}),
                                            ("DELETE", target, None), ("DELETE", target + "/pending", None),
-                                           ("DELETE", "/ThemeSongs/downloads", None)]:
+                                           ("DELETE", "/ThemeSongs/downloads", None), ("POST", "/ThemeSongs/downloads/redownload", None)]:
                     action_status, error = request(method, path, body, token)
                     assert action_status == 409 and field(error, "code") == "availableAfterScan", f"scan must block {method} {path}: {action_status} {error}"
                 checked_scan_guards = True
@@ -287,7 +287,7 @@ for _ in range(60):
 else:
     raise AssertionError("JellyScore did not run after Jellyfin's library scan")
 assert_settings(token, False, [])
-for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/downloads"), ("GET", "/ThemeSongs/strings/en-us"), ("GET", "/ThemeSongs/activity"), ("POST", "/ThemeSongs/queue/cancel"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit")]:
+for method, path in [("GET", "/ThemeSongs/downloads"), ("DELETE", "/ThemeSongs/downloads"), ("POST", "/ThemeSongs/downloads/redownload"), ("GET", "/ThemeSongs/strings/en-us"), ("GET", "/ThemeSongs/activity"), ("POST", "/ThemeSongs/queue/cancel"), ("POST", "/ThemeSongs/scan"), ("POST", "/ThemeSongs/settings"), ("POST", "/ThemeSongs/downloader/retry"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/edit")]:
     status, _ = request(method, path)
     assert status in (401, 403), f"unauthorized {path}: {status}"
 print("Jellyfin 12 plugin smoke checks passed")
@@ -407,6 +407,8 @@ assert field(last, "kind") == "scan" and field(last, "total") == 0, f"scan and q
 request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": library_ids}, token)
 print("Unified activity status, queue cancellation, and latest-completion summary passed")
 if os.environ.get("LIVE_YOUTUBE") == "0":
+    from redownload import check_redownload
+    check_redownload(token, items["Items"], library_ids)
     raise SystemExit(0)
 options = films["LibraryOptions"]
 options["TypeOptions"] = [{"Type": "Movie", "MetadataFetchers": ["TheMovieDb"]}]

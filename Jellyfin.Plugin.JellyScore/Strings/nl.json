@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Alle thema's opnieuw downloaden",
+  "confirmRedownloadAll": "Alle beheerde thema's opnieuw downloaden van hun opgeslagen bronnen en verwerken met je huidige opgeslagen audio-instellingen? Dit omvat alle pagina's en zoekresultaten. Bestaande thema's blijven behouden als het vervangen mislukt.",
+  "redownloadQueued": "In wachtrij voor opnieuw downloaden: {0}.",
+  "redownloadFailed": "Het thema kon niet opnieuw worden gedownload. Het bestaande bestand is niet gewijzigd. Controleer de Jellyfin-logboeken en probeer het opnieuw.",
   "activity": "Activiteit",
   "lastRun": "Laatste uitvoering",
   "cancelling": "Annuleren…",
@@ -62,7 +66,7 @@
   "errorCopied": "Gekopieerd",
   "copyErrorFailed": "Kan fout niet kopiëren. Probeer opnieuw.",
   "themeVolume": "Doelluidheid (LUFS)",
-  "themeVolumeHelp": "Standaard: −30 LUFS. Meer negatieve waarden maken themamuziek zachter. Wijzigingen gelden voor nieuwe en vernieuwde themamuziek, niet voor bestaande downloads.",
+  "themeVolumeHelp": "Standaard: −30 LUFS. Meer negatieve waarden maken themamuziek zachter. Sla je instellingen op en gebruik Alle thema's opnieuw downloaden om bestaande downloads bij te werken.",
   "cookiesLabel": "YouTube-cookies (optioneel)",
   "cookiesHelp": "Plak de inhoud van je cookies.txt-bestand. Het gebruik van een account kan leiden tot schorsing.",
   "cookiesGuide": "YouTube-cookies exporteren",

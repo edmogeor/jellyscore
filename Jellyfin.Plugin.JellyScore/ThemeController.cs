@@ -110,6 +110,17 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
     [HttpGet("scan")]
     public object Progress() => scan.Status;
 
+    [HttpPost("downloads/redownload")]
+    public IActionResult RedownloadAll()
+    {
+        lock (processing.Gate)
+        {
+            if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
+            try { return Accepted(new { Queued = processing.RedownloadAll() }); }
+            catch (InvalidOperationException) { return Conflict(new { Code = "queueBusy" }); }
+        }
+    }
+
     [HttpGet("activity")]
     public object Activity()
     {
@@ -181,10 +192,13 @@ public sealed class ThemeController(ThemeService themes, ThemeScan scan, ITaskMa
 
     private IActionResult Enqueue(Guid id, string? youtubeUrl, bool replacement)
     {
-        if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
-        try { processing.Enqueue(id, youtubeUrl, replacement); return Accepted(); }
-        catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ThemeService.ErrorCode(e, "requestFailed") }); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return UnprocessableEntity(new { Code = "themeLocationUnavailable" }); }
+        lock (processing.Gate)
+        {
+            if (scan.Status.Running) return Conflict(new { Code = "availableAfterScan" });
+            try { processing.Enqueue(id, youtubeUrl, replacement); return Accepted(); }
+            catch (InvalidOperationException e) { return Conflict(new { Error = e.Message, Code = ThemeService.ErrorCode(e, "requestFailed") }); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return UnprocessableEntity(new { Code = "themeLocationUnavailable" }); }
+        }
     }
 
     [HttpDelete("{id:guid}")]

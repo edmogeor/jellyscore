@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Pobierz ponownie wszystkie motywy",
+  "confirmRedownloadAll": "Pobrać ponownie wszystkie zarządzane motywy z zapisanych źródeł i przetworzyć je z bieżącymi zapisanymi ustawieniami dźwięku? Obejmuje to wszystkie strony i wyniki wyszukiwania. Istniejące motywy pozostaną bez zmian, jeśli zastąpienie się nie powiedzie.",
+  "redownloadQueued": "W kolejce do ponownego pobrania: {0}.",
+  "redownloadFailed": "Nie udało się ponownie pobrać motywu. Istniejący plik nie został zmieniony. Sprawdź logi Jellyfin i spróbuj ponownie.",
   "activity": "Aktywność",
   "lastRun": "Ostatnie uruchomienie",
   "cancelling": "Anulowanie…",
@@ -62,7 +66,7 @@
   "errorCopied": "Skopiowano",
   "copyErrorFailed": "Nie udało się skopiować błędu. Spróbuj ponownie.",
   "themeVolume": "Docelowa głośność (LUFS)",
-  "themeVolumeHelp": "Domyślnie: −30 LUFS. Bardziej ujemne wartości oznaczają cichsze motywy. Zmiany dotyczą nowych i odświeżonych motywów, a nie istniejących pobrań.",
+  "themeVolumeHelp": "Domyślnie: −30 LUFS. Bardziej ujemne wartości oznaczają cichsze motywy. Zapisz ustawienia i użyj Pobierz ponownie wszystkie motywy, aby zaktualizować istniejące pobrania.",
   "cookiesLabel": "Pliki cookie YouTube (opcjonalnie)",
   "cookiesHelp": "Wklej zawartość pliku cookies.txt. Korzystanie z konta może spowodować jego zawieszenie.",
   "cookiesGuide": "Jak wyeksportować pliki cookie YouTube",

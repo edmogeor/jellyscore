@@ -238,8 +238,10 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         }
     }
 
-    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null, string? youtubeUrl = null, bool administratorAdd = false)
+    public async Task<ThemeResult> Process(Guid id, bool replacement, CancellationToken ct, Action<string>? reportStage = null, string? youtubeUrl = null,
+        bool administratorAdd = false, bool redownload = false, int? targetLufs = null)
     {
+        var loudness = targetLufs ?? Plugin.Instance.Configuration.EffectiveTargetLufs;
         var manualVideoId = youtubeUrl is null ? null : YouTube.VideoId(youtubeUrl) ?? throw new InvalidOperationException("Invalid YouTube URL.");
         var gate = _locks.GetOrAdd(id, _ => new SemaphoreSlim(1));
         await gate.WaitAsync(ct);
@@ -280,7 +282,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
             var minimumMatchStrength = Plugin.Instance.Configuration.EffectiveMinimumMatchStrength;
             var excludedIds = store.Read(s => new HashSet<string>(s.ExcludedVideos.GetValueOrDefault(id) ?? []));
             var excludedRecordings = store.Read(s => new HashSet<string>(s.ExcludedRecordings.GetValueOrDefault(id) ?? []));
-            if (replacement && manualVideoId is null)
+            if (replacement && manualVideoId is null && !redownload)
             {
                 excludedIds.Add(existing!.VideoId);
                 excludedRecordings.Add(existing.Recording);
@@ -321,6 +323,37 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 Refresh(item);
                 return new(result);
             }
+            if (redownload)
+            {
+                var saved = existing ?? throw new InvalidOperationException("No managed theme to refresh.");
+                var temporary = Path.Combine(folder, ".theme-" + Guid.NewGuid().ToString("N") + ".mp3");
+                try
+                {
+                    var source = new Choice(new Video(saved.VideoId, saved.VideoTitle, "", "", null), saved.Recording, saved.Score, saved.Evidence);
+                    if (saved.VideoId.StartsWith("tvdb:", StringComparison.Ordinal))
+                    {
+                        if (!Uri.TryCreate(saved.SourceUrl, UriKind.Absolute, out var savedUrl))
+                            throw new DownloadFailure("The saved theme source is missing or unsupported.");
+                        reportStage?.Invoke("stageDownloading");
+                        await Audio.ConvertUrl(savedUrl, temporary, encoder, loudness, ct,
+                            reportStage is null ? null : () => reportStage("stageProcessing"));
+                    }
+                    else
+                    {
+                        var videoId = YouTube.VideoId(saved.SourceUrl ?? "https://www.youtube.com/watch?v=" + saved.VideoId);
+                        if (videoId is null || videoId != saved.VideoId)
+                            throw new DownloadFailure("The saved theme source is missing or unsupported.");
+                        reportStage?.Invoke("stagePreparing");
+                        var original = await YouTube.ManualChoice(videoId, item is BoxSet ? franchise! : work, ct);
+                        source = source with { Video = original.Video with { Title = saved.VideoTitle } };
+                        reportStage?.Invoke("stageDownloading");
+                        await Audio.Convert(source, temporary, encoder, loudness, ct,
+                            reportStage is null ? null : () => reportStage("stageProcessing"));
+                    }
+                    return await Install(temporary, source, saved.SourceUrl);
+                }
+                finally { if (File.Exists(temporary)) File.Delete(temporary); }
+            }
             if (manualVideoId is not null)
             {
                 reportStage?.Invoke("stageSearching");
@@ -329,7 +362,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 try
                 {
                     reportStage?.Invoke("stageDownloading");
-                    await Audio.Convert(manual, temporary, encoder, Plugin.Instance.Configuration.EffectiveTargetLufs, ct,
+                    await Audio.Convert(manual, temporary, encoder, loudness, ct,
                         reportStage is null ? null : () => reportStage("stageProcessing"));
                     return await Install(temporary, manual);
                 }
@@ -345,7 +378,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                     reportStage?.Invoke("stageDownloading");
                     try
                     {
-                        await Audio.ConvertUrl(url, temporary, encoder, Plugin.Instance.Configuration.EffectiveTargetLufs, ct,
+                        await Audio.ConvertUrl(url, temporary, encoder, loudness, ct,
                             reportStage is null ? null : () => reportStage("stageProcessing"));
                         converted = true;
                     }
@@ -427,7 +460,7 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
                 try
                 {
                     reportStage?.Invoke("stageDownloading");
-                    try { await Audio.Convert(choice, temporary, encoder, Plugin.Instance.Configuration.EffectiveTargetLufs, ct,
+                    try { await Audio.Convert(choice, temporary, encoder, loudness, ct,
                         reportStage is null ? null : () => reportStage("stageProcessing")); }
                     catch (DownloadFailure) when (sourceAttempt == 0)
                     {

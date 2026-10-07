@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Retélécharger tous les thèmes",
+  "confirmRedownloadAll": "Retélécharger tous les thèmes gérés depuis leurs sources enregistrées et les traiter avec vos paramètres audio actuellement enregistrés ? Cela inclut toutes les pages et tous les résultats de recherche. Les thèmes existants sont conservés si le remplacement échoue.",
+  "redownloadQueued": "En attente de retéléchargement : {0}.",
+  "redownloadFailed": "Impossible de retélécharger le thème. Le fichier existant n'a pas été modifié. Consultez les journaux Jellyfin et réessayez.",
   "activity": "Activité",
   "lastRun": "Dernière exécution",
   "cancelling": "Annulation…",
@@ -62,7 +66,7 @@
   "errorCopied": "Copié",
   "copyErrorFailed": "Impossible de copier l'erreur. Réessayez.",
   "themeVolume": "Niveau sonore cible (LUFS)",
-  "themeVolumeHelp": "Valeur par défaut : −30 LUFS. Des valeurs plus négatives réduisent le volume. Les changements concernent les nouveaux thèmes et ceux actualisés, pas les téléchargements existants.",
+  "themeVolumeHelp": "Valeur par défaut : −30 LUFS. Des valeurs plus négatives réduisent le volume. Enregistrez les paramètres, puis utilisez Retélécharger tous les thèmes pour mettre à jour les téléchargements existants.",
   "cookiesLabel": "Cookies YouTube (facultatif)",
   "cookiesHelp": "Collez le contenu de votre fichier cookies.txt. L'utilisation d'un compte peut entraîner sa suspension.",
   "cookiesGuide": "Exporter les cookies YouTube",

@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "すべてのテーマ曲を再ダウンロード",
+  "confirmRedownloadAll": "管理対象のすべてのテーマ曲を保存済みのソースから再ダウンロードし、現在保存されている音声設定で再処理しますか？すべてのページと検索結果が対象です。置き換えに失敗した場合、既存のテーマ曲はそのまま残ります。",
+  "redownloadQueued": "再ダウンロードの待機件数：{0}。",
+  "redownloadFailed": "テーマ曲を再ダウンロードできませんでした。既存のファイルは変更されていません。Jellyfin のログを確認して、もう一度お試しください。",
   "activity": "アクティビティ",
   "lastRun": "前回の実行",
   "cancelling": "キャンセル中…",
@@ -62,7 +66,7 @@
   "errorCopied": "コピーしました",
   "copyErrorFailed": "エラーをコピーできませんでした。もう一度お試しください。",
   "themeVolume": "目標音量 (LUFS)",
-  "themeVolumeHelp": "既定値：−30 LUFS。数値が低いほど音量が小さくなります。変更は新規または更新したテーマ曲に適用され、既存のダウンロードには適用されません。",
+  "themeVolumeHelp": "既定値：−30 LUFS。数値が低いほど音量が小さくなります。設定を保存し、「すべてのテーマ曲を再ダウンロード」で既存のダウンロードを更新してください。",
   "cookiesLabel": "YouTube の Cookie（任意）",
   "cookiesHelp": "cookies.txt の内容を貼り付けてください。アカウントを使用すると、停止される可能性があります。",
   "cookiesGuide": "YouTube の Cookie のエクスポート方法",

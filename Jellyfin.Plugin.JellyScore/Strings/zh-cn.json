@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "重新下载所有主题音乐",
+  "confirmRedownloadAll": "从保存的来源重新下载所有受管理的主题音乐，并使用当前已保存的音频设置重新处理吗？这包括所有页面和搜索结果。如果替换失败，现有主题音乐将保持不变。",
+  "redownloadQueued": "已加入重新下载队列：{0}。",
+  "redownloadFailed": "无法重新下载主题音乐。现有文件未被修改。请检查 Jellyfin 日志后重试。",
   "activity": "活动",
   "lastRun": "上次运行",
   "cancelling": "正在取消…",
@@ -62,7 +66,7 @@
   "errorCopied": "已复制",
   "copyErrorFailed": "无法复制错误，请重试。",
   "themeVolume": "目标响度 (LUFS)",
-  "themeVolumeHelp": "默认值：−30 LUFS。数值越负，音量越低。更改仅适用于新下载和刷新的主题音乐，不会影响已有下载。",
+  "themeVolumeHelp": "默认值：−30 LUFS。数值越负，音量越低。保存设置后，使用“重新下载所有主题音乐”更新已有下载。",
   "cookiesLabel": "YouTube Cookie（可选）",
   "cookiesHelp": "粘贴 cookies.txt 文件的内容。使用账号可能导致账号被暂停使用。",
   "cookiesGuide": "如何导出 YouTube Cookie",

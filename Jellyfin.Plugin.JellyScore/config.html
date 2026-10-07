@@ -1603,6 +1603,15 @@
               </button>
               <button
                 is="emby-button"
+                id="themeRedownloadAll"
+                class="emby-button"
+                hidden
+              >
+                <span class="material-icons" aria-hidden="true">download</span>
+                <span data-i18n="redownloadAll">{{redownloadAll}}</span>
+              </button>
+              <button
+                is="emby-button"
                 id="themeDeleteAll"
                 class="emby-button"
                 data-destructive
@@ -1793,7 +1802,7 @@
         if (cancelFocusKind && !event.target.closest("#themeActiveRun"))
           cancelFocusKind = null;
       });
-      let bulkBusy = false;
+      let bulkBusy = null;
       let managedTotal = 0;
       let addsProcessing = false;
       let renderedRowsKey = "";
@@ -2079,6 +2088,7 @@
       });
       const updateRowActions = () => {
         const removeAll = $("#themeDeleteAll");
+        const redownloadAll = $("#themeRedownloadAll");
         const add = $("#themeAdd");
         const busyTitle = scanRunning ? t("availableAfterScan") : t("working");
         removeAll.hidden = managedTotal === 0;
@@ -2095,10 +2105,26 @@
             ? busyTitle
             : t("deleteAll");
         removeAll.querySelector("[data-i18n]").textContent = t(
-          bulkBusy ? "deleting" : "deleteAll",
+          bulkBusy === "delete" ? "deleting" : "deleteAll",
         );
         const queueBusy =
           queueRunning || addsProcessing || refreshingItems.size > 0;
+        redownloadAll.hidden = managedTotal === 0;
+        redownloadAll.disabled =
+          scanRunning ||
+          bulkBusy ||
+          queueBusy ||
+          downloaderFailed ||
+          !managedTotal;
+        redownloadAll.title = scanRunning
+          ? t("availableAfterScan")
+          : queueBusy
+            ? t("queueBusy")
+            : bulkBusy
+              ? t("working")
+              : downloaderFailed
+                ? t(downloaderFailureCode)
+                : t("redownloadAll");
         $("#themeQueueBusy").textContent = t(
           queueBusy ? "queueBusy" : "scanHelp",
         );
@@ -2151,7 +2177,12 @@
         if (editSubmit)
           editSubmit.disabled = scanRunning || bulkBusy || downloaderFailed;
       };
-      const confirmDelete = async (message, title, itemId = null) => {
+      const confirmAction = async (
+        message,
+        title,
+        itemId = null,
+        action = "delete",
+      ) => {
         if (confirming) return false;
         confirming = true;
         try {
@@ -2160,8 +2191,8 @@
               {
                 title,
                 text: message,
-                confirmText: t("delete"),
-                primary: "delete",
+                confirmText: t(action),
+                primary: action === "delete" ? "delete" : undefined,
                 dialogOptions: { id: "themeSongsConfirm" },
               },
               "",
@@ -3098,7 +3129,7 @@
           remove.onclick = async () => {
             if (scanRunning || bulkBusy || row.dataset.busy === "true") return;
             if (
-              !(await confirmDelete(
+              !(await confirmAction(
                 t("confirmDelete"),
                 t("deleteTheme"),
                 item.ItemId,
@@ -3564,6 +3595,35 @@
           button.textContent = t("retryDownloader");
         }
       };
+      $("#themeRedownloadAll").onclick = async () => {
+        $("#themeBulkMenu").open = false;
+        if (!visible || $("#themeRedownloadAll").disabled) return;
+        if (
+          !(await confirmAction(
+            t("confirmRedownloadAll"),
+            t("redownloadAll"),
+            null,
+            "redownloadAll",
+          ))
+        )
+          return;
+        if (!visible || $("#themeRedownloadAll").disabled) return;
+        bulkBusy = "redownload";
+        updateRowActions();
+        try {
+          const result = await request("downloads/redownload", {
+            method: "POST",
+          });
+          toast(t("redownloadQueued", result.Queued));
+          await load(progress);
+          await load(rows);
+        } catch (e) {
+          showError(e);
+        } finally {
+          bulkBusy = null;
+          updateRowActions();
+        }
+      };
       $("#themeDeleteAll").onclick = async () => {
         $("#themeBulkMenu").open = false;
         if (
@@ -3574,7 +3634,7 @@
           !managedTotal
         )
           return;
-        if (!(await confirmDelete(t("confirmDeleteAll"), t("deleteAll"))))
+        if (!(await confirmAction(t("confirmDeleteAll"), t("deleteAll"))))
           return;
         if (
           !visible ||
@@ -3584,7 +3644,7 @@
           !managedTotal
         )
           return;
-        bulkBusy = true;
+        bulkBusy = "delete";
         updateRowActions();
         try {
           const result = await request("downloads", { method: "DELETE" });
@@ -3599,7 +3659,7 @@
         } catch (e) {
           showError(e);
         } finally {
-          bulkBusy = false;
+          bulkBusy = null;
           updateRowActions();
         }
       };

@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Ladda ned alla teman igen",
+  "confirmRedownloadAll": "Ladda ned alla hanterade teman igen från deras sparade källor och bearbeta dem med dina aktuella sparade ljudinställningar? Detta omfattar alla sidor och sökresultat. Befintliga teman behålls om ersättningen misslyckas.",
+  "redownloadQueued": "I kö för ny nedladdning: {0}.",
+  "redownloadFailed": "Temat kunde inte laddas ned igen. Den befintliga filen ändrades inte. Kontrollera Jellyfin-loggarna och försök igen.",
   "activity": "Aktivitet",
   "lastRun": "Senaste körningen",
   "cancelling": "Avbryter…",
@@ -62,7 +66,7 @@
   "errorCopied": "Kopierat",
   "copyErrorFailed": "Det gick inte att kopiera felet. Försök igen.",
   "themeVolume": "Målnivå för ljudstyrka (LUFS)",
-  "themeVolumeHelp": "Standard: −30 LUFS. Mer negativa värden ger lägre ljudstyrka. Ändringar gäller nya och uppdaterade teman, inte befintliga nedladdningar.",
+  "themeVolumeHelp": "Standard: −30 LUFS. Mer negativa värden ger lägre ljudstyrka. Spara inställningarna och använd Ladda ned alla teman igen för att uppdatera befintliga nedladdningar.",
   "cookiesLabel": "YouTube-cookies (valfritt)",
   "cookiesHelp": "Klistra in innehållet i din cookies.txt-fil. Om du använder ett konto kan det stängas av.",
   "cookiesGuide": "Så exporterar du YouTube-cookies",

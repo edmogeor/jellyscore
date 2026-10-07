@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "모든 테마 음악 다시 다운로드",
+  "confirmRedownloadAll": "관리되는 모든 테마 음악을 저장된 소스에서 다시 다운로드하고 현재 저장된 오디오 설정으로 다시 처리하시겠습니까? 모든 페이지와 검색 결과가 포함됩니다. 교체에 실패하면 기존 테마 음악은 그대로 유지됩니다.",
+  "redownloadQueued": "다시 다운로드 대기 중: {0}개.",
+  "redownloadFailed": "테마 음악을 다시 다운로드할 수 없습니다. 기존 파일은 변경되지 않았습니다. Jellyfin 로그를 확인하고 다시 시도하세요.",
   "activity": "활동",
   "lastRun": "마지막 실행",
   "cancelling": "취소 중…",
@@ -62,7 +66,7 @@
   "errorCopied": "복사됨",
   "copyErrorFailed": "오류를 복사할 수 없습니다. 다시 시도하세요.",
   "themeVolume": "목표 음량 (LUFS)",
-  "themeVolumeHelp": "기본값: −30 LUFS. 값이 더 작아질수록 소리가 작아집니다. 변경 사항은 새로 다운로드하거나 새로 고친 테마에만 적용되며 기존 다운로드에는 적용되지 않습니다.",
+  "themeVolumeHelp": "기본값: −30 LUFS. 값이 더 작아질수록 소리가 작아집니다. 설정을 저장한 후 모든 테마 음악 다시 다운로드를 사용하여 기존 다운로드를 업데이트하세요.",
   "cookiesLabel": "YouTube 쿠키 (선택 사항)",
   "cookiesHelp": "cookies.txt 파일의 내용을 붙여넣으세요. 계정을 사용하면 계정이 정지될 수 있습니다.",
   "cookiesGuide": "YouTube 쿠키 내보내기 방법",

@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Volver a descargar todos los temas",
+  "confirmRedownloadAll": "¿Volver a descargar todos los temas administrados desde sus fuentes guardadas y procesarlos con la configuración de audio guardada actual? Esto incluye todas las páginas y resultados de búsqueda. Los temas existentes se conservan si falla el reemplazo.",
+  "redownloadQueued": "En cola para volver a descargar: {0}.",
+  "redownloadFailed": "No se pudo volver a descargar el tema. El archivo existente no se modificó. Consulta los registros de Jellyfin e inténtalo de nuevo.",
   "activity": "Actividad",
   "lastRun": "Última ejecución",
   "cancelling": "Cancelando…",
@@ -62,7 +66,7 @@
   "errorCopied": "Copiado",
   "copyErrorFailed": "No se pudo copiar el error. Inténtalo de nuevo.",
   "themeVolume": "Sonoridad objetivo (LUFS)",
-  "themeVolumeHelp": "Valor predeterminado: −30 LUFS. Los valores más negativos producen un sonido más bajo. Los cambios se aplican a los temas nuevos y actualizados, no a las descargas existentes.",
+  "themeVolumeHelp": "Valor predeterminado: −30 LUFS. Los valores más negativos producen un sonido más bajo. Guarda la configuración y usa Volver a descargar todos los temas para actualizar las descargas existentes.",
   "cookiesLabel": "Cookies de YouTube (opcional)",
   "cookiesHelp": "Pega el contenido de tu archivo cookies.txt. El uso de una cuenta puede provocar su suspensión.",
   "cookiesGuide": "Cómo exportar cookies de YouTube",

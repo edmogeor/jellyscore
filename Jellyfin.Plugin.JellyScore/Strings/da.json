@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Download alle temaer igen",
+  "confirmRedownloadAll": "Download alle administrerede temaer igen fra deres gemte kilder og behandl dem med dine aktuelle gemte lydindstillinger? Dette omfatter alle sider og søgeresultater. Eksisterende temaer bevares, hvis erstatningen mislykkes.",
+  "redownloadQueued": "I kø til ny download: {0}.",
+  "redownloadFailed": "Temaet kunne ikke downloades igen. Den eksisterende fil blev ikke ændret. Tjek Jellyfin-loggene og prøv igen.",
   "activity": "Aktivitet",
   "lastRun": "Seneste kørsel",
   "cancelling": "Annullerer…",
@@ -62,7 +66,7 @@
   "errorCopied": "Kopieret",
   "copyErrorFailed": "Fejlen kunne ikke kopieres. Prøv igen.",
   "themeVolume": "Målniveau for lydstyrke (LUFS)",
-  "themeVolumeHelp": "Standard: −30 LUFS. Mere negative værdier giver lavere lydstyrke. Ændringer gælder nye og opdaterede temamusiknumre, ikke eksisterende downloads.",
+  "themeVolumeHelp": "Standard: −30 LUFS. Mere negative værdier giver lavere lydstyrke. Gem dine indstillinger, og brug Download alle temaer igen for at opdatere eksisterende downloads.",
   "cookiesLabel": "YouTube-cookies (valgfrit)",
   "cookiesHelp": "Indsæt indholdet af din cookies.txt-fil. Brug af en konto kan føre til, at den bliver suspenderet.",
   "cookiesGuide": "Sådan eksporterer du YouTube-cookies",

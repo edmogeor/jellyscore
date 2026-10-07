@@ -91,6 +91,14 @@ check(YouTube.ValidCookies("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\t
     !YouTube.ValidCookies("VISITOR_INFO1_LIVE=test") && !YouTube.ValidCookies("# HTTP Cookie File\n\0"),
     "only bounded Netscape cookie files can be saved");
 const string tvTemplate = "https://example.com/themes/{tvdbId}.mp3";
+check(TvThemeSource.ValidUrl("https://example.com/themes/73244.mp3") &&
+    !TvThemeSource.ValidUrl("http://example.com/theme.mp3") &&
+    !TvThemeSource.ValidUrl("file:///media/theme.mp3") &&
+    !TvThemeSource.ValidUrl("https://127.0.0.1/theme.mp3") &&
+    !TvThemeSource.ValidUrl("https://[::1]/theme.mp3") &&
+    !TvThemeSource.ValidUrl("https://localhost/theme.mp3") &&
+    !TvThemeSource.ValidUrl("https://user:password@example.com/theme.mp3") &&
+    !TvThemeSource.ValidUrl("https://example.com:8443/theme.mp3"), "saved TV sources retain the public HTTPS URL boundary on redownload");
 check(TvThemeSource.ValidTemplate(tvTemplate) &&
     TvThemeSource.Url(tvTemplate, "73244")?.AbsoluteUri == "https://example.com/themes/73244.mp3" &&
     TvThemeSource.Url(tvTemplate, "not-an-id") is null &&

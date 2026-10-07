@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Lataa kaikki tunnusmusiikit uudelleen",
+  "confirmRedownloadAll": "Ladataanko kaikki hallitut tunnusmusiikit uudelleen tallennetuista lähteistä ja käsitelläänkö ne nykyisillä tallennetuilla ääniasetuksilla? Tämä kattaa kaikki sivut ja hakutulokset. Nykyiset tunnusmusiikit säilyvät, jos korvaaminen epäonnistuu.",
+  "redownloadQueued": "Jonossa uudelleenladattavaksi: {0}.",
+  "redownloadFailed": "Tunnusmusiikkia ei voitu ladata uudelleen. Nykyistä tiedostoa ei muutettu. Tarkista Jellyfinin lokit ja yritä uudelleen.",
   "activity": "Toiminta",
   "lastRun": "Viimeisin suoritus",
   "cancelling": "Perutaan…",
@@ -62,7 +66,7 @@
   "errorCopied": "Kopioitu",
   "copyErrorFailed": "Virhettä ei voitu kopioida. Yritä uudelleen.",
   "themeVolume": "Tavoiteäänekkyys (LUFS)",
-  "themeVolumeHelp": "Oletus: −30 LUFS. Negatiivisemmat arvot tarkoittavat hiljaisempaa ääntä. Muutos koskee uusia ja päivitettyjä tunnusmusiikkeja, ei aiempia latauksia.",
+  "themeVolumeHelp": "Oletus: −30 LUFS. Negatiivisemmat arvot tarkoittavat hiljaisempaa ääntä. Tallenna asetukset ja päivitä nykyiset lataukset toiminnolla Lataa kaikki tunnusmusiikit uudelleen.",
   "cookiesLabel": "YouTube-evästeet (valinnainen)",
   "cookiesHelp": "Liitä cookies.txt-tiedoston sisältö. Tilin käyttäminen voi johtaa sen jäädyttämiseen.",
   "cookiesGuide": "YouTube-evästeiden vientiohje",

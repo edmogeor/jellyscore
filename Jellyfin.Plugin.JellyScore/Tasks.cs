@@ -17,16 +17,19 @@ namespace Jellyfin.Plugin.JellyScore;
 public sealed record ThemeProcessingJob(ManagedTheme Theme, string? YouTubeUrl, bool Replacement, string Stage = "queued", bool Processing = true, string? Code = null, string? Result = null)
 {
     public Guid RequestId { get; } = Guid.NewGuid();
+    public bool Redownload { get; init; }
+    public int? TargetLufs { get; init; }
 }
 
 public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProcessingWorker> logger) : BackgroundService
 {
-    private readonly Channel<ThemeProcessingJob> _queue = Channel.CreateBounded<ThemeProcessingJob>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { SingleReader = true });
+    private readonly Channel<ThemeProcessingJob[]> _queue = Channel.CreateBounded<ThemeProcessingJob[]>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { SingleReader = true });
     private readonly Dictionary<Guid, ThemeProcessingJob> _jobs = new();
     private readonly Lock _gate = new();
     private ScanStatus _status = new() { Kind = "queue" };
     private ScanStatus _lastStatus = new() { Kind = "queue" };
     private CancellationTokenSource? _runCancellation;
+    internal Lock Gate => _gate;
 
     public ScanStatus Status { get { lock (_gate) return _status.Snapshot(); } }
     public ScanStatus LastStatus { get { lock (_gate) return _lastStatus.Snapshot(); } }
@@ -45,22 +48,40 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
         {
             if (_status.Cancelling) throw new InvalidOperationException("Theme processing is cancelling; retry after it stops.");
             var job = new ThemeProcessingJob(themes.PrepareRequest(id, replacement, youtubeUrl), youtubeUrl, replacement);
-            _jobs[job.RequestId] = job;
-            if (!_queue.Writer.TryWrite(job))
-            {
-                _jobs.Remove(job.RequestId);
-                throw new InvalidOperationException("The processing queue is full. Please retry.");
-            }
-            if (!_status.Running)
-            {
-                _runCancellation = new CancellationTokenSource();
-                _status = new ScanStatus { Kind = "queue", RunId = Guid.NewGuid(), StartedAt = DateTimeOffset.UtcNow,
-                    LastCompletedAt = DateTimeOffset.UtcNow, Running = true, Prepared = true,
-                    PriorOtherSecondsPerItem = _lastStatus.Processed > _lastStatus.KnownProcessed ? _lastStatus.OtherSeconds / (_lastStatus.Processed - _lastStatus.KnownProcessed) : null };
-            }
-            _status.Total++;
-            RemoveCompleted(id, job.RequestId);
+            EnqueueBatch([job]);
         }
+    }
+
+    public int RedownloadAll()
+    {
+        lock (_gate)
+        {
+            if (_status.Running) throw new InvalidOperationException("Theme processing is queued or running; retry after it finishes.");
+            var targetLufs = Plugin.Instance.Configuration.EffectiveTargetLufs;
+            var jobs = themes.List().Select(theme => new ThemeProcessingJob(theme, null, true)
+                { Redownload = true, TargetLufs = targetLufs }).ToArray();
+            if (jobs.Length > 0) EnqueueBatch(jobs);
+            return jobs.Length;
+        }
+    }
+
+    private void EnqueueBatch(ThemeProcessingJob[] jobs)
+    {
+        foreach (var job in jobs) _jobs[job.RequestId] = job;
+        if (!_queue.Writer.TryWrite(jobs))
+        {
+            foreach (var job in jobs) _jobs.Remove(job.RequestId);
+            throw new InvalidOperationException("The processing queue is full. Please retry.");
+        }
+        if (!_status.Running)
+        {
+            _runCancellation = new CancellationTokenSource();
+            _status = new ScanStatus { Kind = "queue", RunId = Guid.NewGuid(), StartedAt = DateTimeOffset.UtcNow,
+                LastCompletedAt = DateTimeOffset.UtcNow, Running = true, Prepared = true,
+                PriorOtherSecondsPerItem = _lastStatus.Processed > _lastStatus.KnownProcessed ? _lastStatus.OtherSeconds / (_lastStatus.Processed - _lastStatus.KnownProcessed) : null };
+        }
+        _status.Total += jobs.Length;
+        foreach (var job in jobs) RemoveCompleted(job.Theme.ItemId, job.RequestId);
     }
 
     public void Cancel()
@@ -115,7 +136,8 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        await foreach (var job in _queue.Reader.ReadAllAsync(ct))
+        await foreach (var batch in _queue.Reader.ReadAllAsync(ct))
+        foreach (var job in batch)
         {
             var id = job.RequestId;
             CancellationTokenSource cancellation;
@@ -130,7 +152,8 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
             using var runCancellation = cancellation;
             try
             {
-                var result = await themes.Process(job.Theme.ItemId, job.Replacement, cancellation.Token, stage => Update(id, stage), job.YouTubeUrl, administratorAdd: !job.Replacement);
+                var result = await themes.Process(job.Theme.ItemId, job.Replacement, cancellation.Token, stage => Update(id, stage), job.YouTubeUrl,
+                    administratorAdd: !job.Replacement, redownload: job.Redownload, targetLufs: job.TargetLufs);
                 lock (_gate)
                 {
                     _status.RecordResult(job.Theme.Name, result.ReasonCode is null && result.Result is not ("Added" or "Replaced" or "Already themed")
@@ -147,7 +170,7 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
             }
             catch (Exception e)
             {
-                var code = ThemeService.ErrorCode(e, job.Replacement ? "refreshFailed" : "requestFailed");
+                var code = ThemeService.ErrorCode(e, job.Redownload ? "redownloadFailed" : job.Replacement ? "refreshFailed" : "requestFailed");
                 var diagnostic = $"Queued theme processing failed for {job.Theme.Name} ({job.Theme.ItemId}): {e.Message}";
                 lock (_gate)
                 {
@@ -371,10 +394,13 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken ct)
     {
-        if (processing.IsBusy) throw new InvalidOperationException("Theme processing is queued or running; retry the scan after it finishes.");
         var (knownIds, knownPrior, otherPrior) = store.Read(s => (s.Themes.Keys.ToHashSet(), s.ScanKnownSecondsPerItem, s.ScanOtherSecondsPerItem));
-        _status = new ScanStatus { RunId = Guid.NewGuid(), StartedAt = DateTimeOffset.UtcNow, Running = true,
-            PriorKnownSecondsPerItem = knownPrior, PriorOtherSecondsPerItem = otherPrior };
+        lock (processing.Gate)
+        {
+            if (processing.IsBusy) throw new InvalidOperationException("Theme processing is queued or running; retry the scan after it finishes.");
+            _status = new ScanStatus { RunId = Guid.NewGuid(), StartedAt = DateTimeOffset.UtcNow, Running = true,
+                PriorKnownSecondsPerItem = knownPrior, PriorOtherSecondsPerItem = otherPrior };
+        }
         var status = _status;
         try
         {

@@ -224,6 +224,16 @@ try {
     return route.fulfill({ status: 202 });
   });
   let expandedDownloads = false;
+  let redownloadCalls = 0;
+  let releaseRedownload;
+  const redownloadReady = new Promise((resolve) => {
+    releaseRedownload = resolve;
+  });
+  await page.route(/\/ThemeSongs\/downloads\/redownload$/, async (route) => {
+    redownloadCalls++;
+    await redownloadReady;
+    return route.fulfill({ status: 202, json: { Queued: 52 } });
+  });
   let holdSearch = false;
   let releaseSearch;
   const searchReady = new Promise((resolve) => {
@@ -604,6 +614,66 @@ try {
   assert.ok(
     (await page.locator("#themeRows").textContent()).includes(refreshName),
   );
+  const bulkScroll = await tableScroll.evaluate((element) => element.scrollTop);
+  await page.locator("#themeBulkMenu summary").click();
+  await page
+    .getByRole("button", { name: "Redownload all themes", exact: true })
+    .click();
+  const redownloadConfirm = page.locator("#themeSongsConfirm");
+  await redownloadConfirm.waitFor({ state: "visible" });
+  assert.ok(
+    (await redownloadConfirm.textContent()).includes(
+      "all pages and search results",
+    ),
+  );
+  assert.ok(
+    (await redownloadConfirm.textContent()).includes(
+      "current saved audio settings",
+    ),
+  );
+  await redownloadConfirm
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  assert.equal(
+    redownloadCalls,
+    0,
+    "cancelling bulk confirmation does not queue work",
+  );
+  await page.locator("#themeBulkMenu summary").click();
+  await page
+    .getByRole("button", { name: "Redownload all themes", exact: true })
+    .click();
+  await redownloadConfirm.waitFor({ state: "visible" });
+  await redownloadConfirm
+    .getByRole("button", { name: "Redownload all themes", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => document.querySelector("#themeRedownloadAll").disabled,
+  );
+  releaseRedownload();
+  await page.waitForFunction(() =>
+    window.jellyScoreToasts.some(
+      (text) => text === "Queued for redownload: 52.",
+    ),
+  );
+  await page.waitForFunction(
+    () => !document.querySelector("#themeRedownloadAll").disabled,
+  );
+  assert.equal(
+    redownloadCalls,
+    1,
+    "bulk action sends one whole-library request instead of one per displayed row",
+  );
+  assert.equal(await search.inputValue(), "Films");
+  assert.equal(
+    await page.locator("#themePageInfo").textContent(),
+    "Page 2 of 3",
+  );
+  assert.equal(
+    await tableScroll.evaluate((element) => element.scrollTop),
+    bulkScroll,
+    "bulk acceptance preserves downloads scroll",
+  );
   expandedDownloads = false;
   await clearSearch.click();
   await page.waitForFunction(
@@ -676,6 +746,11 @@ try {
     await page.locator("#themeDeleteAll").isDisabled(),
     true,
     "bulk deletion is disabled during a scan",
+  );
+  assert.equal(
+    await page.locator("#themeRedownloadAll").isDisabled(),
+    true,
+    "bulk redownload is disabled during a scan",
   );
   const scanActions = page.locator("#themeRows tr").first().locator("button");
   assert.equal(
@@ -781,6 +856,11 @@ try {
   );
   assert.equal(await page.locator("#themeScanStart").isVisible(), true);
   assert.equal(await page.locator("#themeScanStart").isDisabled(), true);
+  assert.equal(
+    await page.locator("#themeRedownloadAll").isDisabled(),
+    true,
+    "an active queue prevents duplicate bulk requests",
+  );
   assert.equal(await page.locator("#themeQueueBusy").isVisible(), true);
   assert.equal(
     await page.locator("#themeActiveRun .themeScanState").textContent(),

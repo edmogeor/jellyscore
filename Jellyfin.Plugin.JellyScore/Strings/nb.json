@@ -1,4 +1,8 @@
 {
+  "redownloadAll": "Last ned alle temaer på nytt",
+  "confirmRedownloadAll": "Laste ned alle administrerte temaer på nytt fra lagrede kilder og behandle dem med gjeldende lagrede lydinnstillinger? Dette inkluderer alle sider og søkeresultater. Eksisterende temaer beholdes hvis erstatningen mislykkes.",
+  "redownloadQueued": "I kø for ny nedlasting: {0}.",
+  "redownloadFailed": "Temaet kunne ikke lastes ned på nytt. Den eksisterende filen ble ikke endret. Sjekk Jellyfin-loggene og prøv igjen.",
   "activity": "Aktivitet",
   "lastRun": "Siste kjøring",
   "cancelling": "Avbryter…",
@@ -62,7 +66,7 @@
   "errorCopied": "Kopiert",
   "copyErrorFailed": "Kunne ikke kopiere feilen. Prøv igjen.",
   "themeVolume": "Målnivå for lydstyrke (LUFS)",
-  "themeVolumeHelp": "Standard: −30 LUFS. Mer negative verdier gir lavere lydstyrke. Endringer gjelder nye og oppdaterte temalåter, ikke eksisterende nedlastinger.",
+  "themeVolumeHelp": "Standard: −30 LUFS. Mer negative verdier gir lavere lydstyrke. Lagre innstillingene og bruk Last ned alle temaer på nytt for å oppdatere eksisterende nedlastinger.",
   "cookiesLabel": "YouTube-informasjonskapsler (valgfritt)",
   "cookiesHelp": "Lim inn innholdet i cookies.txt-filen. Bruk av en konto kan føre til at den blir suspendert.",
   "cookiesGuide": "Slik eksporterer du YouTube-informasjonskapsler",
