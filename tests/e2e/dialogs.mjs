@@ -897,7 +897,6 @@ try {
     return {
       width: style.scrollbarWidth,
       color: style.scrollbarColor,
-      gutter: style.scrollbarGutter,
       thumb: {
         background: thumb.backgroundColor,
         border: thumb.border,
