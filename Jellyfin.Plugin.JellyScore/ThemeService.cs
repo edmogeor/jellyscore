@@ -70,9 +70,12 @@ public sealed class ThemeService(ILibraryManager library, IProviderManager provi
         return rows.Where(r => !removed.Contains(r.ItemId)).ToArray();
     }
     public string? Outcome(Guid id) => store.Read(s => s.Outcomes.GetValueOrDefault(id));
+    internal bool InstalledAfter(Guid id, DateTimeOffset at) => store.Read(s => s.Themes.TryGetValue(id, out var theme) && theme.Date > at);
 
     internal static string ErrorCode(Exception e, string fallback) => e.Message switch
     {
+        "Theme processing is already queued for this item." => "queueBusy",
+        "Theme processing is cancelling; retry after it stops." => "cancelling",
         "Theme changed elsewhere. The file was left untouched." or "Theme changed elsewhere. It was not deleted." or
             "Theme changed during download. The file was left untouched." => "themeChanged",
         "Another theme appeared. The file was left untouched." => "anotherTheme",

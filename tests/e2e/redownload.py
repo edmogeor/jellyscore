@@ -49,6 +49,20 @@ def check_redownload(token, items, library_ids):
         assert status == 202 and field(result, "queued") == expected, f"queue all managed themes: {status} {result}"
         return previous
 
+    def retry_issue(issue):
+        _, activity = request("GET", "/ThemeSongs/activity", token=token)
+        previous = field(field(activity, "last"), "runId")
+        assert field(issue, "retryable") and "RetryJob" not in issue, f"issue must expose recovery without private request data: {issue}"
+        status, result = request("POST", f"/ThemeSongs/issues/{field(issue, 'id')}/retry", token=token)
+        assert status == 202, f"retry only the failed item: {status} {result}"
+        status, result = request("POST", f"/ThemeSongs/issues/{field(issue, 'id')}/retry", token=token)
+        assert status == 409 and field(result, "code") == "queueBusy", f"duplicate retry must not enqueue twice: {status} {result}"
+        run = finish_run(previous)
+        assert field(run, "total") == 1 and field(run, "failed") == 0, f"retry must repeat a single operation: {run}"
+        status, result = request("POST", f"/ThemeSongs/issues/{field(issue, 'id')}/retry", token=token)
+        assert status == 404 and field(result, "code") == "issueUnavailable", "old issues cannot be retried after their run is replaced"
+        return run
+
     _, initial = request("GET", "/ThemeSongs/downloads", token=token)
     assert field(initial, "managedTotal") == 0, "controlled redownload checks require an empty managed-theme fixture"
 
@@ -62,15 +76,17 @@ def check_redownload(token, items, library_ids):
 output=; previous=; metadata=; id=
 for arg in "$@"; do
     [ "$previous" = "-o" ] && output="$arg"
-    case "$arg" in --dump-json) metadata=1 ;; https://www.youtube.com/watch?v=*) id="${arg##*=}" ;; esac
+    case "$arg" in --dump-json) metadata=1 ;; ytsearch*) id=ccccccccccc ;; https://www.youtube.com/watch?v=*) id="${arg##*=}" ;; esac
     previous="$arg"
 done
 printf '%s\\n' "$id" >> /tmp/redownload-requests
-if [ -e /tmp/redownload-fail ] && [ "$id" = aaaaaaaaaaa ]; then
+if [ -e /tmp/redownload-refresh-fail ] || { [ -e /tmp/redownload-fail ] && [ "$id" = aaaaaaaaaaa ]; }; then
     printf 'Controlled source unavailable\\n' >&2; exit 1
 fi
 if [ "$metadata" = 1 ]; then
-    printf '{"id":"%s","title":"Original recording","duration":20,"description":"","channel":"Test"}\\n' "$id"
+    title='Original recording'
+    [ "$id" = ccccccccccc ] && title='Dune 2021 Main theme'
+    printf '{"id":"%s","title":"%s","duration":20,"description":"","channel":"Test"}\\n' "$id" "$title"
 else
     cp /tmp/redownload-raw.wav "$output"
 fi
@@ -134,6 +150,10 @@ fi
         assert state()["Themes"][failed_id] == after["Themes"][failed_id], "failed replacement changed the existing theme or its record"
         assert docker("sha256sum", after["Themes"][failed_id]["Path"]).stdout.decode().split()[0].upper() == after["Themes"][failed_id]["Hash"], "failed download changed the existing file"
         docker("rm", "/tmp/redownload-fail")
+        issue = next(issue for issue in field(run, "issues") if field(issue, "failed"))
+        recovered = retry_issue(issue)
+        assert field(recovered, "updated") == 1 and state()["Themes"][failed_id]["VideoId"] == "aaaaaaaaaaa", "redownload retry must keep its saved source"
+        assert state()["ExcludedVideos"] == before["ExcludedVideos"] and state()["ExcludedRecordings"] == before["ExcludedRecordings"], "redownload retries do not become refreshes"
 
         changed = next(record for record in created.values() if record["VideoId"] == "bbbbbbbbbbb")
         docker("sh", "-c", 'printf external-edit >> "$1"', "sh", changed["Path"])
@@ -144,6 +164,42 @@ fi
         assert docker("sha256sum", changed["Path"]).stdout == changed_hash, "redownload overwrote an externally modified file"
         assert set(docker("cat", "/tmp/redownload-requests").stdout.decode().splitlines()) == {"aaaaaaaaaaa"}, "bulk redownload searched for another recording or included an unmanaged theme"
         docker("cmp", "-s", "/tmp/user-theme-original", "/media/movies/User Theme (2000)/theme.mp3")
+
+        fresh_item = next(item for item in items if "Sorcerer" in item["Name"])
+        write("/tmp/redownload-fail", "fail")
+        _, activity = request("GET", "/ThemeSongs/activity", token=token)
+        previous = field(field(activity, "last"), "runId")
+        status, _ = request("POST", f"/ThemeSongs/{fresh_item['Id']}/add", {"youTubeUrl": "https://www.youtube.com/watch?v=aaaaaaaaaaa"}, token)
+        assert status == 202, "queue a controlled unsuccessful add"
+        run = finish_run(previous)
+        _, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+        assert all(field(row, "itemId").replace("-", "") != fresh_item["Id"].replace("-", "") for row in field(downloads, "items")), "an unsuccessful add does not create a card"
+        _, eligible = request("GET", "/ThemeSongs/items?search=Sorcerer", token=token)
+        assert any(field(item, "itemId").replace("-", "") == fresh_item["Id"].replace("-", "") for item in eligible), "unsuccessful adds remain searchable"
+        docker("rm", "/tmp/redownload-fail")
+        assert field(retry_issue(field(run, "issues")[0]), "added") == 1, "add retries retain the selected YouTube source"
+        created.update(state()["Themes"])
+
+        write("/tmp/redownload-refresh-fail", "fail")
+        _, activity = request("GET", "/ThemeSongs/activity", token=token)
+        previous = field(field(activity, "last"), "runId")
+        status, _ = request("POST", f"/ThemeSongs/{failed_id}/refresh", token=token)
+        assert status == 202, "queue a controlled failed refresh"
+        run = finish_run(previous)
+        docker("rm", "/tmp/redownload-refresh-fail")
+        assert field(retry_issue(field(run, "issues")[0]), "updated") == 1, "refresh retries replace only the failed item"
+        assert state()["Themes"][failed_id]["VideoId"] == "ccccccccccc", "refresh retry searches for another recording"
+
+        write("/tmp/redownload-fail", "fail")
+        _, activity = request("GET", "/ThemeSongs/activity", token=token)
+        previous = field(field(activity, "last"), "runId")
+        status, _ = request("POST", f"/ThemeSongs/{failed_id}/edit", {"youTubeUrl": "https://www.youtube.com/watch?v=aaaaaaaaaaa"}, token)
+        assert status == 202, "queue a controlled failed source edit"
+        run = finish_run(previous)
+        docker("rm", "/tmp/redownload-fail")
+        assert field(retry_issue(field(run, "issues")[0]), "updated") == 1, "source-edit retries replace only the failed item"
+        assert state()["Themes"][failed_id]["VideoId"] == "aaaaaaaaaaa", "source-edit retry preserves the selected URL"
+        print("Activity retries preserve add, refresh, source-edit, and redownload semantics; failed adds stay outside downloads")
         print("Saved-source bulk redownload, captured audio settings, failure recovery, and ownership checks passed")
     finally:
         request("POST", "/ThemeSongs/queue/cancel", token=token)
@@ -159,5 +215,5 @@ fi
         else:
             docker("rm", "-f", deno)
         docker("rm", "-rf", fake_folder)
-        docker("rm", "-f", "/tmp/redownload-fail", "/tmp/redownload-raw.wav", "/tmp/redownload-requests", "/tmp/redownload-deno-original")
+        docker("rm", "-f", "/tmp/redownload-fail", "/tmp/redownload-refresh-fail", "/tmp/redownload-raw.wav", "/tmp/redownload-requests", "/tmp/redownload-deno-original")
         restart()

@@ -1,5 +1,6 @@
 // Run against `make up` with Playwright available through NODE_PATH.
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";
 
@@ -199,6 +200,7 @@ try {
   };
   let lastCompletedScan = { ...scanStatus };
   let lastCompletedQueue = { ...queueStatus };
+  let processingIds = [];
   await page.route(/\/ThemeSongs\/activity$/, (route) => {
     if (!scanStatus.Running && scanStatus.FinishedAt)
       lastCompletedScan = { ...scanStatus };
@@ -206,6 +208,7 @@ try {
       lastCompletedQueue = { ...queueStatus };
     return route.fulfill({
       json: {
+        ProcessingItems: processingIds,
         Current: scanStatus.Running
           ? scanStatus
           : queueStatus.Running
@@ -596,7 +599,7 @@ try {
       response.url().includes("/ThemeSongs/downloads") &&
       new URL(response.url()).searchParams.get("page") === "2",
   );
-  await refreshRow.locator("button").nth(1).click();
+  await refreshRow.locator(".themeMenuItems button").nth(1).click();
   await (await refreshed).finished();
   await page.waitForFunction(
     () => !document.querySelector("#themeRows [data-busy=true]"),
@@ -757,7 +760,10 @@ try {
     true,
     "bulk redownload is disabled during a scan",
   );
-  const scanActions = page.locator("#themeRows tr").first().locator("button");
+  const scanActions = page
+    .locator("#themeRows tr")
+    .first()
+    .locator(".themeMenuItems button");
   assert.equal(
     await scanActions.nth(0).isEnabled(),
     true,
@@ -846,6 +852,9 @@ try {
     ActiveItems: [{ Name: "Dialog film", Stage: "stageDownloading" }],
     Issues: [
       {
+        Id: randomUUID(),
+        ItemId: items[0].ItemId,
+        Retryable: true,
         Name: "Dialog film",
         Code: "downloadFailed",
         Failed: true,
@@ -915,7 +924,10 @@ try {
     !(await issue.textContent()).includes(diagnostic),
     "diagnostics are copyable without being displayed",
   );
-  const copyIssue = issue.locator("button");
+  const copyIssue = issue.getByRole("button", {
+    name: "Copy error",
+    exact: true,
+  });
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await copyIssue.click();
   assert.equal(
@@ -1011,6 +1023,69 @@ try {
     "queue completion retains its issue history",
   );
   await page.locator("#themeLastActivity > summary").click();
+  const warning = page.getByRole("button", {
+    name: "View issue for Dialog film",
+    exact: true,
+  });
+  await warning.waitFor({ state: "visible" });
+  await warning.click();
+  const focusedIssue = page.locator("#themeLastActivity .themeIssue");
+  assert.equal(
+    await focusedIssue.evaluate(
+      (element) => element === document.activeElement,
+    ),
+    true,
+    "card issue links expand Last run and focus the exact issue by ID",
+  );
+  assert.equal(
+    await focusedIssue.evaluate(
+      (element) => getComputedStyle(element).outlineWidth,
+    ),
+    "1px",
+    "issue focus is a simple thin outline",
+  );
+  assert.equal(
+    await focusedIssue
+      .locator(".themeIssueRetry .material-icons")
+      .textContent(),
+    "refresh",
+  );
+  assert.equal(
+    await focusedIssue.getByRole("button", { name: /YouTube/ }).count(),
+    0,
+    "Activity has no YouTube-source action",
+  );
+  const duplicateNameIssue = {
+    Id: randomUUID(),
+    ItemId: items[1].ItemId,
+    Name: "Dialog film",
+    Code: "reasonNoMatch",
+    Failed: false,
+    Retryable: true,
+    At: new Date().toISOString(),
+    Diagnostic: null,
+  };
+  queueStatus = {
+    ...queueStatus,
+    Issues: [...queueStatus.Issues, duplicateNameIssue],
+  };
+  const notice = page.getByRole("button", {
+    name: "View issue for Custom source",
+    exact: true,
+  });
+  await notice.waitFor({ state: "visible" });
+  assert.equal(
+    await notice.locator(".material-icons").textContent(),
+    "info_outline",
+    "skipped outcomes use a neutral issue icon",
+  );
+  await notice.click();
+  assert.equal(
+    await page.evaluate(() => document.activeElement.dataset.issueId),
+    duplicateNameIssue.Id,
+    "identically named issues are linked by their item and issue IDs",
+  );
+  await page.locator("#themeLastActivity > summary").click();
   queueStatus = {
     ...queueStatus,
     RunId: "single-refresh",
@@ -1040,6 +1115,11 @@ try {
     await page.locator("#themeLastActivity .themeIssue").count(),
     0,
     "a new completed activity replaces the previous run's issues",
+  );
+  assert.equal(
+    await warning.isVisible(),
+    false,
+    "warning icons disappear when their run leaves retained history",
   );
   assert.equal(
     await page.locator(".themeRunKind").count(),
@@ -1088,10 +1168,10 @@ try {
   );
   assert.equal(
     await page
-      .locator("#themeRows tr:first-child .themeRowActions > *")
+      .locator("#themeRows tr:first-child .themeRowActions > :not([hidden])")
       .count(),
     1,
-    "the row exposes only its overflow menu",
+    "a normal row exposes only its overflow menu",
   );
   await openMenu("Dialog film");
   await page
@@ -1557,17 +1637,18 @@ try {
   );
   // The global add action remains available when there are no managed downloads.
   const queuedAdds = [];
-  await page.route(/\/ThemeSongs\/downloads(?:\?|$)/, (route) =>
-    route.fulfill({
+  await page.route(/\/ThemeSongs\/downloads(?:\?|$)/, (route) => {
+    const installed = queuedAdds.filter((item) => item.Status === "Active");
+    return route.fulfill({
       json: {
-        Total: queuedAdds.length,
-        AllTotal: queuedAdds.length,
-        ManagedTotal: 0,
+        Total: installed.length,
+        AllTotal: installed.length,
+        ManagedTotal: installed.length,
         Processing: queuedAdds.some((item) => item.Processing),
-        Items: queuedAdds,
+        Items: installed,
       },
-    }),
-  );
+    });
+  });
   const available = ["Movie", "Series", "Collection"].map((Kind, index) => ({
     ItemId: (index + 300).toString(16).padStart(32, "0"),
     Name: "Unthemed " + Kind,
@@ -1589,16 +1670,53 @@ try {
     });
   });
   const additions = [];
-  const dismissedAdds = [];
-  await page.route(/\/ThemeSongs\/[^/]+\/pending$/, (route) => {
-    assert.equal(route.request().method(), "DELETE");
-    const id = route.request().url().split("/").at(-2);
-    const index = queuedAdds.findIndex((item) => item.ItemId === id);
-    assert.ok(index >= 0 && !queuedAdds[index].Processing);
-    dismissedAdds.push(id);
-    queuedAdds.splice(index, 1);
-    return route.fulfill({ status: 204 });
+  const issueRetries = [];
+  await page.route(/\/ThemeSongs\/issues\/[^/]+\/retry$/, (route) => {
+    issueRetries.push(route.request().url().split("/").at(-2));
+    queuedAdds[0].Processing = true;
+    queuedAdds[0].Stage = "queued";
+    processingIds = [queuedAdds[0].ItemId];
+    queueStatus = {
+      ...queueStatus,
+      RunId: randomUUID(),
+      Running: true,
+      Prepared: true,
+      FinishedAt: null,
+      StartedAt: new Date().toISOString(),
+      Processed: 0,
+      Total: 1,
+      Added: 0,
+      Failed: 0,
+      Issues: [],
+      ActiveItems: [{ Name: queuedAdds[0].Name, Stage: "stagePreparing" }],
+    };
+    return route.fulfill({ status: 202 });
   });
+  function failAdds() {
+    for (const item of queuedAdds) {
+      item.Processing = false;
+      item.Stage = "Failed";
+    }
+    processingIds = [];
+    queueStatus = {
+      ...queueStatus,
+      Running: false,
+      ActiveItems: [],
+      FinishedAt: new Date().toISOString(),
+      Processed: queuedAdds.length,
+      Failed: queuedAdds.length,
+      Issues: queuedAdds.map((item) => ({
+        Id: randomUUID(),
+        ItemId: item.ItemId,
+        Name: item.Name,
+        Code: "searchFailed",
+        Failed: true,
+        Retryable: true,
+        At: new Date().toISOString(),
+        Diagnostic: "Controlled search diagnostic",
+      })),
+    };
+  }
   await page.route(/\/ThemeSongs\/[^/]+\/add$/, (route) => {
     additions.push({
       url: route.request().url(),
@@ -1614,12 +1732,33 @@ try {
       ...available.find((item) => item.ItemId === id),
       Library: "Films",
       Date: new Date().toISOString(),
-      Pending: true,
       Processing: true,
       Stage: "queued",
       Status: "queued",
       Code: null,
     });
+    if (!queueStatus.Running)
+      queueStatus = {
+        ...queueStatus,
+        RunId: randomUUID(),
+        Running: true,
+        Prepared: true,
+        StartedAt: new Date().toISOString(),
+        FinishedAt: null,
+        Processed: 0,
+        Total: 0,
+        Added: 0,
+        Failed: 0,
+        Issues: [],
+      };
+    queueStatus.Total++;
+    queueStatus.ActiveItems = [
+      {
+        Name: available.find((item) => item.ItemId === id).Name,
+        Stage: "stagePreparing",
+      },
+    ];
+    processingIds.push(id);
     return route.fulfill({ status: 202 });
   });
   await page.getByRole("tab", { name: "Overview", exact: true }).click();
@@ -1638,6 +1777,7 @@ try {
   for (const closeWith of ["Escape", "Cancel"]) {
     await openAdd();
     const dialog = page.locator("#themeSongsAdd");
+    await page.waitForTimeout(400);
     await dialog.getByLabel("Search your library").focus();
     for (let tab = 0; tab < 12; tab++) {
       await page.keyboard.press("Tab");
@@ -1865,10 +2005,11 @@ try {
       .click();
     await addDialog.waitFor({ state: "detached" });
     await page.waitForFunction(() => document.activeElement.id === "themeAdd");
-    const queuedRow = page.locator(
-      `#themeRows tr[data-item-id="${result.ItemId}"]`,
+    assert.equal(
+      await page.locator("#themeRows tr").count(),
+      0,
+      "queued adds stay in Activity until installation",
     );
-    await queuedRow.waitFor({ state: "visible" });
     assert.equal(
       await page.locator("#themeScanStart").isDisabled(),
       true,
@@ -1882,10 +2023,6 @@ try {
       true,
       "adding an item confirms it entered the shared queue",
     );
-    assert.equal(
-      await queuedRow.locator(".themeRowBusy").textContent(),
-      "syncQueued…",
-    );
     assert.ok(additions.at(-1).url.endsWith(result.ItemId + "/add"));
     assert.equal(
       additions.at(-1).body.YouTubeUrl,
@@ -1893,72 +2030,93 @@ try {
     );
   }
   await page.reload();
-  await page.locator("#themeRows tr").first().waitFor({ state: "visible" });
+  await page.locator("#themeActiveRun").waitFor({ state: "visible" });
   assert.equal(
     await page.locator("#themeRows tr").count(),
-    3,
-    "queued adds stay visible after reloading the page",
+    0,
+    "queued adds survive navigation in Activity without download placeholders",
   );
-  queuedAdds[0].Processing = false;
-  queuedAdds[0].Code = "searchFailed";
-  queuedAdds[0].Stage = "Failed";
-  const failedRow = page.locator("#themeRows tr").first();
-  await failedRow.locator("summary").waitFor({ state: "visible" });
-  await failedRow.locator("summary").click();
-  await failedRow
-    .getByRole("button", { name: "Try again", exact: true })
-    .waitFor({ state: "visible" });
-  assert.equal(
-    await page
-      .locator("#themeRows tr")
-      .first()
-      .locator(".themeRowError")
-      .isVisible(),
-    true,
-    "queued failures show a row error and retry action",
-  );
-  assert.equal(
-    await page
-      .locator("#themeRows")
-      .getByRole("button", { name: "Remove from list", exact: true })
-      .count(),
-    1,
-    "only failed adds can be dismissed",
-  );
-  scanStatus = { ...scanStatus, Running: true };
-  const dismissButton = failedRow.getByRole("button", {
-    name: "Remove from list",
-    exact: true,
-  });
+  failAdds();
   await page.waitForFunction(
     () =>
-      [...document.querySelectorAll("#themeRows button")].find(
-        (button) => button.dataset.themeAction === "Remove from list",
-      )?.disabled,
+      document.querySelector("#themeActiveRun").hidden &&
+      document.querySelector("#themeLastActivity").open,
+  );
+  await page.locator("#themeLastActivity .themeIssues > summary").click();
+  const failedIssue = page.locator("#themeLastActivity .themeIssue").first();
+  const retryButton = failedIssue.getByRole("button", {
+    name: "Retry theme processing for Unthemed Movie",
+    exact: true,
+    includeHidden: true,
+  });
+  await retryButton.waitFor({ state: "visible" });
+  assert.equal(
+    await page.locator("#themeRows tr").count(),
+    0,
+    "failed adds stay outside Manage Downloads",
   );
   assert.equal(
-    await dismissButton.isDisabled(),
-    true,
-    "failed-add dismissal is disabled during a scan",
+    await failedIssue.getByRole("button").count(),
+    2,
+    "issue recovery has only Retry and Copy error icons",
   );
-  await page.waitForTimeout(300);
-  assert.deepEqual(
-    await disabledStyle(dismissButton),
-    await disabledStyle(page.locator("#themeAdd")),
-    "failed-add actions use the same disabled style",
+  scanStatus = { ...scanStatus, Running: true };
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeLastActivity .themeIssueRetry").disabled,
+  );
+  assert.equal(
+    await retryButton.isDisabled(),
+    true,
+    "issue retries are disabled during a scan",
   );
   scanStatus = { ...scanStatus, Running: false };
   await page.waitForFunction(
     () =>
-      [...document.querySelectorAll("#themeRows button")].find(
-        (button) => button.dataset.themeAction === "Remove from list",
-      )?.disabled === false,
+      !document.querySelector("#themeLastActivity .themeIssueRetry").disabled,
   );
-  await dismissButton.click();
+  if (
+    !(await page
+      .locator("#themeLastActivity")
+      .evaluate((element) => element.open))
+  )
+    await page.locator("#themeLastActivity > summary").click();
+  await retryButton.click();
   await page.waitForFunction(
-    () => document.querySelectorAll("#themeRows tr").length === 2,
+    () => !document.querySelector("#themeActiveRun").hidden,
   );
-  assert.deepEqual(dismissedAdds, [available[0].ItemId]);
+  assert.equal(
+    issueRetries.length,
+    1,
+    "the retry icon queues exactly one original action",
+  );
+  assert.equal(
+    await retryButton.isDisabled(),
+    true,
+    "queued retries cannot be submitted twice",
+  );
+  queuedAdds[0].Processing = false;
+  queuedAdds[0].Status = "Active";
+  queuedAdds[0].Date = new Date().toISOString();
+  queuedAdds[0].Source = "https://www.youtube.com/watch?v=aaaaaaaaaaa";
+  queuedAdds[0].YouTubeUrl = queuedAdds[0].Source;
+  queuedAdds[0].Path = "/media/Films/Unthemed Movie/theme.mp3";
+  processingIds = [];
+  queueStatus = {
+    ...queueStatus,
+    Running: false,
+    FinishedAt: new Date().toISOString(),
+    ActiveItems: [],
+    Processed: 1,
+    Added: 1,
+    Issues: [],
+  };
+  await page.locator("#themeRows tr").waitFor({ state: "visible" });
+  assert.equal(
+    await page.locator("#themeRows .themeIssueWarning").isVisible(),
+    false,
+    "successful recovery clears the card issue link",
+  );
   // Give each fresh page the resolved locale that the plugin reads from Jellyfin.
   await page.addInitScript(() => {
     Object.defineProperty(HTMLHtmlElement.prototype, "lang", {
@@ -2047,12 +2205,11 @@ try {
       (label) => window.jellyScoreToasts.includes(label),
       dictionary.itemQueued.replace("{0}", available[0].Name),
     );
-    const row = page.locator("#themeRows tr").first();
-    await row.waitFor({ state: "visible" });
+    await page.locator("#themeActiveRun").waitFor({ state: "visible" });
     assert.equal(
-      await row.locator(".themeRowBusy").textContent(),
-      "sync" + dictionary.queued,
-      locale + ": queued status",
+      await page.locator("#themeRows tr").count(),
+      0,
+      locale + ": queued adds are not download cards",
     );
     assert.equal(
       await page.locator("#themeScanStart").isDisabled(),
@@ -2064,42 +2221,44 @@ try {
       dictionary.queueBusy,
       locale + ": queue-busy reason",
     );
-    queuedAdds[0].Processing = false;
-    queuedAdds[0].Code = "searchFailed";
-    queuedAdds[0].Stage = "Failed";
-    await row.locator("summary").waitFor({ state: "visible" });
+    failAdds();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#themeLastActivity").open &&
+        document.querySelector("#themeActiveRun").hidden,
+    );
+    await page.waitForFunction(
+      () => !document.querySelector("#themeScanStart").disabled,
+    );
     assert.equal(
       await page.locator("#themeScanStart").isEnabled(),
       true,
       locale + ": failed adds do not block full scans",
     );
-    await row.locator("summary").click();
-    await row.locator(".themeMenuItems").waitFor({ state: "visible" });
+    await page.locator("#themeLastActivity .themeIssues > summary").click();
+    const issue = page.locator("#themeLastActivity .themeIssue").first();
     assert.equal(
-      await row
-        .getByRole("button", { name: dictionary.tryAgain, exact: true })
+      await issue
+        .getByRole("button", {
+          name: dictionary.retryIssueFor.replace("{0}", available[0].Name),
+          exact: true,
+        })
         .count(),
       1,
       locale + ": retry action",
     );
-    await row
-      .getByRole("button", { name: dictionary.youTubeLink, exact: true })
-      .click();
-    const source = page.locator("#themeSongsEdit");
-    await source.waitFor({ state: "visible" });
     assert.equal(
-      await source.locator(".fieldDescription").textContent(),
-      dictionary.pasteYouTubeLink,
-      locale + ": source help",
+      await issue
+        .getByRole("button", { name: dictionary.copyError, exact: true })
+        .count(),
+      1,
+      locale + ": copy action",
     );
-    await source
-      .getByRole("button", { name: dictionary.cancel, exact: true })
-      .click();
-    await source.waitFor({ state: "detached" });
-    await row.locator("summary").click();
-    await row
-      .getByRole("button", { name: dictionary.removeFromList, exact: true })
-      .click();
+    assert.equal(
+      await issue.getByRole("button").count(),
+      2,
+      locale + ": no source action in Activity",
+    );
     await page.locator("#themeEmpty").waitFor({ state: "visible" });
   }
   assert.deepEqual(errors, [], "the add modal has no browser errors");

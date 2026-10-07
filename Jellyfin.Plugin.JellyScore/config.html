@@ -1015,6 +1015,9 @@
       margin: 0;
     }
     #themeSongsPage .themeIssue {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 0.75rem;
       padding: 0.85rem 1rem;
       border-bottom: 1px solid var(--jf-palette-divider);
       overflow-wrap: anywhere;
@@ -1022,12 +1025,11 @@
     #themeSongsPage .themeIssue:last-child {
       border-bottom: 0;
     }
-    #themeSongsPage .themeIssueFailed {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 2.75rem;
-      column-gap: 0.75rem;
+    #themeSongsPage .themeIssue:focus {
+      outline: 1px solid var(--jf-palette-primary-main);
+      outline-offset: -1px;
     }
-    #themeSongsPage .themeIssueFailed .themeIssueHeader {
+    #themeSongsPage .themeIssueHeader {
       grid-column: 1 / -1;
     }
     #themeSongsPage .themeIssueHeader {
@@ -1035,17 +1037,6 @@
       align-items: baseline;
       flex-wrap: wrap;
       gap: 0.25rem 0.75rem;
-    }
-    #themeSongsPage .themeIssueLink {
-      padding: 0;
-      border: 0;
-      background: transparent;
-      color: inherit;
-      font: inherit;
-      font-weight: 700;
-      text-align: left;
-      text-decoration: underline;
-      cursor: pointer;
     }
     #themeSongsPage .themeIssueHeader time {
       margin-left: auto;
@@ -1070,17 +1061,22 @@
     #themeSongsPage .themeIssue p {
       margin: 0.25rem 0 0;
     }
-    #themeSongsPage .themeIssueFailed p {
+    #themeSongsPage .themeIssue p {
       grid-column: 1;
       grid-row: 2;
     }
-    #themeSongsPage .themeIssueFailed button.emby-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+    #themeSongsPage .themeIssueActions {
       grid-column: 2;
       grid-row: 2;
       align-self: end;
+      display: flex;
+      gap: 0.25rem;
+    }
+    #themeSongsPage
+      :is(.themeIssueActions button, .themeIssueWarning).emby-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       width: 2.75rem;
       height: 2.75rem;
       padding: 0;
@@ -1090,13 +1086,26 @@
       background: transparent;
       color: var(--jf-palette-text-secondary);
     }
-    #themeSongsPage .themeIssueFailed button.emby-button:hover {
+    #themeSongsPage
+      :is(.themeIssueActions button, .themeIssueWarning).emby-button:hover:not(
+        :disabled
+      ) {
       background: var(--jf-palette-action-hover);
       color: var(--jf-palette-text-primary);
     }
-    #themeSongsPage .themeIssueFailed button.emby-button:focus-visible {
+    #themeSongsPage
+      :is(
+        .themeIssueActions button,
+        .themeIssueWarning
+      ).emby-button:focus-visible {
       outline: 2px solid var(--jf-palette-primary-main);
       outline-offset: 2px;
+    }
+    #themeSongsPage .themeIssueWarning[data-failed="true"] {
+      color: var(--jf-palette-error-main);
+    }
+    #themeSongsPage .themeIssueActions button:disabled {
+      opacity: 0.5;
     }
     #themeSongsPage .themeScanCancel {
       margin-top: 1rem;
@@ -1298,6 +1307,12 @@
         align-items: start;
         padding: 0.75rem 1rem;
         padding-inline-end: 0.25rem;
+      }
+      #themeSongsPage
+        .detailTable
+        tbody
+        tr:has(.themeIssueWarning:not([hidden])) {
+        grid-template-columns: minmax(0, 1fr) 5.75rem;
       }
       #themeSongsPage .detailTable td:first-child {
         width: auto;
@@ -1815,7 +1830,9 @@
       let confirming = false;
       let lastActivity = null;
       const refreshingItems = new Set();
-      const refreshErrors = new Map();
+      let processingItems = new Set();
+      let activityIssues = new Map();
+      let issueLinks = new Map();
       let savedSettings = "";
       let settingsLoaded = false;
       let settingsSaving = false;
@@ -2184,7 +2201,53 @@
         );
         if (editSubmit)
           editSubmit.disabled = scanRunning || bulkBusy || downloaderFailed;
+        updateIssueActions();
       };
+      function focusIssue(issueId) {
+        const entry = activityIssues.get(issueId);
+        if (!entry) {
+          toast(t("issueUnavailable"));
+          return;
+        }
+        const container = entry.container;
+        if (container.closest("#themeLastActivity"))
+          $("#themeLastActivity").open = true;
+        container.querySelector(".themeIssues").open = true;
+        const card = [...container.querySelectorAll(".themeIssue")].find(
+          (card) => card.dataset.issueId === issueId,
+        );
+        if (!card) return;
+        card.scrollIntoView({ block: "center" });
+        card.focus({ preventScroll: true });
+      }
+      function updateIssueActions() {
+        for (const warning of page.querySelectorAll(".themeIssueWarning")) {
+          const row = warning.closest("tr");
+          const entry = issueLinks.get(row.dataset.itemId);
+          warning.hidden =
+            !entry ||
+            row.dataset.busy === "true" ||
+            new Date(row.dataset.date) > new Date(entry.issue.At);
+          if (!entry) continue;
+          warning.dataset.failed = String(entry.issue.Failed);
+          warning.firstElementChild.textContent = entry.issue.Failed
+            ? "warning_amber"
+            : "info_outline";
+          warning.onclick = () => focusIssue(entry.issue.Id);
+        }
+        for (const retry of page.querySelectorAll(".themeIssueRetry")) {
+          const issue = activityIssues.get(retry.dataset.issueId)?.issue;
+          retry.hidden = !issue?.Retryable;
+          retry.disabled =
+            !issue?.Retryable ||
+            scanRunning ||
+            queueCancelling ||
+            bulkBusy ||
+            downloaderFailed ||
+            processingItems.has(issue?.ItemId) ||
+            refreshingItems.has(issue?.ItemId);
+        }
+      }
       const confirmAction = async (
         message,
         title,
@@ -2490,17 +2553,12 @@
               </div>
             </div>`;
           dialog.querySelector("h3").textContent = t("editThemeFor", item.Name);
-          dialog.querySelector(".fieldDescription").textContent = item.Pending
-            ? t("pasteYouTubeLink")
-            : t("editThemeHelp");
+          dialog.querySelector(".fieldDescription").textContent =
+            t("editThemeHelp");
           const input = dialog.querySelector("input");
-          dialog.querySelector("label").textContent = item.Pending
-            ? t("youTubeLink")
-            : t("youTubeUrl");
+          dialog.querySelector("label").textContent = t("youTubeUrl");
           input.value = item.YouTubeUrl || "";
-          dialog.querySelector(".button-submit").textContent = item.Pending
-            ? t("addTheme")
-            : t("confirmEdit");
+          dialog.querySelector(".button-submit").textContent = t("confirmEdit");
           const cancel = dialog.querySelector(".button-cancel");
           cancel.textContent = t("cancel");
           cancel.onclick = () => dialogHelper.close(dialog);
@@ -2823,21 +2881,20 @@
         )
           return;
         refreshingItems.add(item.ItemId);
-        refreshErrors.delete(item.ItemId);
         updateRowActions();
         let action = "refresh";
-        if (item.Pending) action = "add";
-        else if (youtubeUrl) action = "edit";
+        if (youtubeUrl) action = "edit";
         try {
           await request(item.ItemId + "/" + action, {
             method: "POST",
-            ...(item.Pending || youtubeUrl
+            ...(youtubeUrl
               ? { body: JSON.stringify({ YouTubeUrl: youtubeUrl }) }
               : {}),
           });
           toast(t("itemQueued", item.Name));
         } catch (error) {
-          refreshErrors.set(item.ItemId, userError(error));
+          if (!silent(error))
+            toast(t("scanItemStage", item.Name, userError(error)));
         } finally {
           refreshingItems.delete(item.ItemId);
           await load(rows);
@@ -2881,7 +2938,6 @@
           search,
           data.Items,
           [...refreshingItems],
-          [...refreshErrors],
         ]);
         if (renderedRowsKey === rowsKey) {
           updateRowActions();
@@ -2922,6 +2978,7 @@
         for (const item of data.Items) {
           const row = document.createElement("tr");
           row.dataset.itemId = item.ItemId;
+          row.dataset.date = item.Date;
           const theme = document.createElement("td");
           theme.className = "detailTableBodyCell";
           const heading = document.createElement("strong");
@@ -2936,19 +2993,8 @@
             document.createTextNode(item.Library || ""),
           );
           status.className = "fieldDescription";
-          status.hidden =
-            (item.Status === "Active" && !item.Result) ||
-            item.Pending ||
-            item.Processing;
-          if (item.Result) {
-            const resultKey =
-              {
-                Replaced: "replaced",
-                "No replacement found": "noReplacement",
-                "Already themed": "alreadyThemed",
-              }[item.Result] || "requestFailed";
-            status.textContent = t(resultKey);
-          } else status.textContent = status.hidden ? "" : t("modified");
+          status.hidden = item.Status === "Active";
+          status.textContent = status.hidden ? "" : t("modified");
           const date = new Date(item.Date);
           const shortDate = date.toLocaleString(undefined, {
             month: "short",
@@ -2964,25 +3010,8 @@
           mobileDate.dateTime = item.Date;
           mobileDate.title = date.toLocaleString();
           mobileDate.textContent = shortDate;
-          const error = document.createElement("div");
-          error.className = "themeRowError";
-          error.hidden = true;
-          error.setAttribute("role", "alert");
-          const errorText = document.createElement("span");
-          error.append(icon("error_outline"), errorText);
-          if (refreshErrors.has(item.ItemId)) {
-            errorText.textContent = refreshErrors.get(item.ItemId);
-            error.hidden = false;
-          }
-          if (item.Code) {
-            errorText.textContent = t(item.Code);
-            error.hidden = false;
-          }
           const showRowError = (e) => {
-            if (!silent(e)) {
-              errorText.textContent = userError(e);
-              error.hidden = false;
-            }
+            if (!silent(e)) toast(t("scanItemStage", item.Name, userError(e)));
           };
           const busy = document.createElement("div");
           busy.className = "themeRowBusy";
@@ -2997,10 +3026,9 @@
           if (item.Processing) {
             row.dataset.busy = "true";
             busy.hidden = false;
-            if (item.Stage === "queued") busyText.textContent = t("queued");
-            else if (item.Stage === "stagePreparing" && !item.Pending)
-              busyText.textContent = t("refreshing");
-            else busyText.textContent = t(item.Stage);
+            busyText.textContent = t(
+              item.Stage === "queued" ? "queued" : "working",
+            );
           }
           const setBusy = (text) => {
             renderedRowsKey = "";
@@ -3009,7 +3037,7 @@
             busyText.textContent = text;
             updateRowActions();
           };
-          theme.append(heading, metadata, status, mobileDate, busy, error);
+          theme.append(heading, metadata, status, mobileDate, busy);
           const added = document.createElement("td");
           added.className = "detailTableBodyCell";
           const addedDate = mobileDate.cloneNode(true);
@@ -3017,48 +3045,6 @@
           added.append(addedDate);
           const actions = document.createElement("td");
           actions.className = "detailTableBodyCell";
-          if (item.Pending) {
-            if (!item.Processing) {
-              const retry = actionButton("tryAgain", "refresh");
-              retry.dataset.requiresDownloader = "true";
-              retry.onclick = async () => {
-                setBusy(t("queued"));
-                await queueProcessing(item, item.YouTubeUrl);
-              };
-              const chooseSource = actionButton("youTubeLink", "edit");
-              chooseSource.dataset.requiresDownloader = "true";
-              chooseSource.onclick = async () => {
-                try {
-                  const youtubeUrl = await editSource(item);
-                  if (!youtubeUrl) return;
-                  setBusy(t("queued"));
-                  await queueProcessing(item, youtubeUrl);
-                } catch (e) {
-                  setBusy("");
-                  showRowError(e);
-                }
-              };
-              const dismiss = actionButton("removeFromList", "close");
-              dismiss.onclick = async () => {
-                if (scanRunning || bulkBusy || row.dataset.busy === "true")
-                  return;
-                setBusy(t("removing"));
-                try {
-                  await request(item.ItemId + "/pending", { method: "DELETE" });
-                  refreshErrors.delete(item.ItemId);
-                  await load(rows);
-                  focusRow(null);
-                } catch (e) {
-                  setBusy("");
-                  showRowError(e);
-                }
-              };
-              actions.append(actionMenu(item, [retry, chooseSource, dismiss]));
-            }
-            row.append(theme, added, actions);
-            fragment.append(row);
-            continue;
-          }
           const play = actionButton("playTheme", "play_arrow");
           play.setAttribute("aria-label", t("playThemeFor", item.Name));
           play.dataset.readOnly = "true";
@@ -3077,7 +3063,6 @@
             )
               return;
             setBusy(t("queued"));
-            error.hidden = true;
             queueProcessing(item, youtubeUrl).catch(showRowError);
           };
           refresh.onclick = () => queueReprocessing();
@@ -3122,10 +3107,8 @@
               return;
             if (!visible || scanRunning || bulkBusy || !row.isConnected) return;
             setBusy(t("deleting"));
-            error.hidden = true;
             try {
               await request(item.ItemId, { method: "DELETE" });
-              refreshErrors.delete(item.ItemId);
               row.remove();
               await load(rows);
             } catch (e) {
@@ -3135,6 +3118,14 @@
             }
           };
           actions.append(actionMenu(item, [play, refresh, edit, remove]));
+          const warning = document.createElement("button", "emby-button");
+          warning.type = "button";
+          warning.className = "emby-button themeIssueWarning";
+          warning.hidden = true;
+          warning.setAttribute("aria-label", t("viewIssueFor", item.Name));
+          warning.title = t("viewIssueFor", item.Name);
+          warning.append(icon("warning_amber"));
+          actions.querySelector(".themeRowActions").prepend(warning);
           row.append(theme, added, actions);
           fragment.append(row);
         }
@@ -3175,6 +3166,7 @@
         scanRunning = active?.Kind === "scan";
         queueRunning = active?.Kind === "queue";
         queueCancelling = queueRunning && active.Cancelling;
+        processingItems = new Set(activityData.ProcessingItems || []);
         updateRowActions();
         const container = $("#themeActiveRun");
         const focusedActivityControl = container.contains(
@@ -3230,6 +3222,22 @@
           $("#themeActivityAnnouncement").textContent = announcement;
         }
         if (data.Failed > (lastActivity?.Failed || 0)) load(settings);
+        activityIssues = new Map();
+        issueLinks = new Map();
+        for (const [run, container] of [
+          [summary, history.querySelector(".themeRunSummary")],
+          [active, $("#themeActiveRun")],
+        ]) {
+          for (const issue of run?.Issues || []) {
+            const entry = { issue, container };
+            activityIssues.set(issue.Id, entry);
+            if (issue.ItemId && !issue.Resolved)
+              issueLinks.set(issue.ItemId, entry);
+            else if (issue.ItemId && issue.Resolved)
+              issueLinks.delete(issue.ItemId);
+          }
+        }
+        updateIssueActions();
         lastActivity = data;
       }
       function renderActivity(container, data) {
@@ -3328,7 +3336,7 @@
         );
         const issues = data.Issues || [];
         const issuesKey =
-          data.RunId + ":" + issues.length + ":" + issues.at(-1)?.At;
+          data.RunId + ":" + issues.map((issue) => issue.Id).join(":");
         const issuesContainer = field("themeIssues");
         if (issuesKey !== issuesContainer.dataset.key) {
           issuesContainer.dataset.key = issuesKey;
@@ -3352,42 +3360,24 @@
             list.tabIndex = 0;
             list.className = "themeScrollbar";
             const scrollTop = list.scrollTop;
-            const keys = new Set(
-              issues.map((issue) => issue.At + ":" + issue.Name),
-            );
+            const keys = new Set(issues.map((issue) => issue.Id));
             for (const item of list.children)
               if (!keys.has(item.dataset.key)) item.remove();
             for (const issue of issues) {
-              const key = issue.At + ":" + issue.Name;
+              const key = issue.Id;
               if ([...list.children].some((item) => item.dataset.key === key))
                 continue;
               const item = document.createElement("li");
               item.dataset.key = key;
+              item.dataset.issueId = issue.Id;
+              item.tabIndex = -1;
               item.className = issue.Failed
                 ? "themeIssue themeIssueFailed"
                 : "themeIssue";
               const header = document.createElement("div");
               header.className = "themeIssueHeader";
-              const name = document.createElement(
-                issue.ItemId ? "button" : "strong",
-              );
+              const name = document.createElement("strong");
               name.textContent = issue.Name;
-              if (issue.ItemId) {
-                name.type = "button";
-                name.className = "themeIssueLink";
-                name.onclick = async () => {
-                  $("#themeSearch").value = issue.Name;
-                  $("#themeSearchClear").hidden = false;
-                  current = 1;
-                  await load(rows);
-                  const row = [...$("#themeRows").children].find(
-                    (row) => row.dataset.itemId === issue.ItemId,
-                  );
-                  if (row) focusRow(issue.ItemId);
-                  else $("#themeSearch").focus();
-                  $("#themeDownloads").scrollIntoView({ block: "start" });
-                };
-              }
               const kind = document.createElement("span");
               kind.className = "themeIssueKind";
               kind.textContent = t(issue.Failed ? "failed" : "scanSkipped");
@@ -3400,6 +3390,46 @@
                 strings?.[issue.Code] ? issue.Code : "reasonNoMatch",
               );
               item.append(header, reason);
+              const actions = document.createElement("div");
+              actions.className = "themeIssueActions";
+              if (issue.Retryable) {
+                const retry = document.createElement("button", "emby-button");
+                retry.className = "emby-button themeIssueRetry";
+                retry.type = "button";
+                retry.dataset.issueId = issue.Id;
+                retry.setAttribute(
+                  "aria-label",
+                  t("retryIssueFor", issue.Name),
+                );
+                retry.title = t("retryIssueFor", issue.Name);
+                retry.append(icon("refresh"));
+                retry.onclick = async () => {
+                  if (retry.disabled) return;
+                  retry.disabled = true;
+                  refreshingItems.add(issue.ItemId);
+                  updateRowActions();
+                  try {
+                    await request("issues/" + issue.Id + "/retry", {
+                      method: "POST",
+                    });
+                    toast(t("itemQueued", issue.Name));
+                    await load(progress);
+                    await load(rows);
+                  } catch (e) {
+                    showError(e);
+                  } finally {
+                    refreshingItems.delete(issue.ItemId);
+                    updateRowActions();
+                    if (item.getClientRects().length)
+                      item.focus({ preventScroll: true });
+                    else if (!$("#themeLastActivity").hidden)
+                      $("#themeLastActivity > summary").focus({
+                        preventScroll: true,
+                      });
+                  }
+                };
+                actions.append(retry);
+              }
               if (issue.Diagnostic) {
                 const copy = document.createElement("button", "emby-button");
                 copy.className = "emby-button";
@@ -3437,8 +3467,9 @@
                     toast(t("copyErrorFailed"));
                   }
                 };
-                item.append(copy);
+                actions.append(copy);
               }
+              if (actions.children.length) item.append(actions);
               list.append(item);
             }
             if (!heading.parentElement) issuesContainer.append(heading, list);

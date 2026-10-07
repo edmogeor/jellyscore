@@ -42,12 +42,15 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
             .Select(jobs => jobs.FirstOrDefault(job => job.Processing) ?? jobs.Last()).ToArray();
     }
 
-    public void Enqueue(Guid id, string? youtubeUrl, bool replacement = false)
+    public void Enqueue(Guid id, string? youtubeUrl, bool replacement = false, bool redownload = false)
     {
         lock (_gate)
         {
             if (_status.Cancelling) throw new InvalidOperationException("Theme processing is cancelling; retry after it stops.");
-            var job = new ThemeProcessingJob(themes.PrepareRequest(id, replacement, youtubeUrl), youtubeUrl, replacement);
+            if (_jobs.Values.Any(job => job.Processing && job.Theme.ItemId == id))
+                throw new InvalidOperationException("Theme processing is already queued for this item.");
+            var job = new ThemeProcessingJob(themes.PrepareRequest(id, replacement, youtubeUrl), youtubeUrl, replacement)
+                { Redownload = redownload, TargetLufs = redownload ? Plugin.Instance.Configuration.EffectiveTargetLufs : null };
             EnqueueBatch([job]);
         }
     }
@@ -113,17 +116,6 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
             _jobs.Remove(job.RequestId);
     }
 
-    public bool Dismiss(Guid itemId)
-    {
-        lock (_gate)
-        {
-            var jobs = _jobs.Values.Where(job => job.Theme.ItemId == itemId).ToArray();
-            if (jobs.Length == 0 || jobs.Any(job => job.Processing || job.Replacement || job.Code is null)) return false;
-            foreach (var job in jobs) _jobs.Remove(job.RequestId);
-            return true;
-        }
-    }
-
     private void Update(Guid id, string stage, bool processing = true, string? code = null, string? result = null)
     {
         lock (_gate)
@@ -157,7 +149,8 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
                 lock (_gate)
                 {
                     _status.RecordResult(job.Theme.Name, result.ReasonCode is null && result.Result is not ("Added" or "Replaced" or "Already themed")
-                        ? result with { ReasonCode = "reasonNoMatch" } : result, job.Theme.ItemId);
+                        ? result with { ReasonCode = "reasonNoMatch" } : result, job.Theme.ItemId, job);
+                    if (result.Result is "Added" or "Replaced" or "Already themed") _lastStatus.ResolveIssues(job.Theme.ItemId);
                     _status.CompleteItem(false);
                     if (!job.Replacement && result.Result is "Added" or "Already themed") _jobs.Remove(id);
                     else Update(id, "Finished", false, result.ReasonCode ?? (job.Replacement ? null : "reasonNoMatch"), result.Result);
@@ -181,7 +174,7 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
                 lock (_gate)
                 {
                     _status.Failed++;
-                    _status.AddIssue(new ScanIssue(job.Theme.Name, code, true, DateTimeOffset.UtcNow, diagnostic, job.Theme.ItemId));
+                    _status.AddIssue(new ScanIssue(job.Theme.Name, code, true, DateTimeOffset.UtcNow, diagnostic, job.Theme.ItemId) { RetryJob = job });
                     _status.CompleteItem(false);
                     Update(id, "Failed", false, code);
                 }
@@ -193,6 +186,7 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
                 {
                     _status.ActiveItems = [];
                     _status.CurrentItem = null;
+                    if (_jobs.TryGetValue(id, out var finished) && !finished.Processing && !finished.Replacement) _jobs.Remove(id);
                     FinishIfIdle();
                 }
             }
@@ -322,14 +316,18 @@ public sealed class ScanStatus
     internal void AddIssue(ScanIssue issue) =>
         Issues = [.. Issues.TakeLast(JellyScoreConstants.ScanRecentIssues - 1), issue];
 
-    internal void RecordResult(string name, ThemeResult result, Guid? itemId = null)
+    internal void ResolveIssues(Guid itemId) => Issues = Issues
+        .Select(issue => issue.ItemId == itemId ? issue with { Resolved = true } : issue).ToArray();
+
+    internal void RecordResult(string name, ThemeResult result, Guid? itemId = null, ThemeProcessingJob? retryJob = null)
     {
         if (result.Result == "Added") Added++;
         else if (result.Result == "Replaced") Updated++;
         else if (result.Result == "Already themed") AlreadyThemed++;
         else if (result.Result == "Previously used recording excluded") Excluded++;
         else NoMatch++;
-        if (result.ReasonCode is { } code) AddIssue(new ScanIssue(name, code, false, DateTimeOffset.UtcNow, null, itemId));
+        if (itemId is { } id && result.Result is "Added" or "Replaced" or "Already themed") ResolveIssues(id);
+        if (result.ReasonCode is { } code) AddIssue(new ScanIssue(name, code, false, DateTimeOffset.UtcNow, null, itemId) { RetryJob = retryJob });
     }
 
     internal void CompleteItem(bool known)
@@ -381,7 +379,13 @@ public sealed class ScanStatus
 // ReSharper restore UnusedAutoPropertyAccessor.Global
 
 // ReSharper disable NotAccessedPositionalProperty.Global
-public sealed record ScanIssue(string Name, string Code, bool Failed, DateTimeOffset At, string? Diagnostic, Guid? ItemId = null);
+public sealed record ScanIssue(string Name, string Code, bool Failed, DateTimeOffset At, string? Diagnostic, Guid? ItemId = null)
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public bool Resolved { get; init; }
+    public bool Retryable => ItemId is not null && !Resolved && Code is not ("scanUnsupported" or "themeChanged" or "anotherTheme" or "themeUnavailable");
+    internal ThemeProcessingJob? RetryJob { get; init; }
+}
 public sealed record ScanActiveItem(string Name, string Stage);
 // ReSharper restore NotAccessedPositionalProperty.Global
 

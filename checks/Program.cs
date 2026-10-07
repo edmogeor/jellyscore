@@ -421,6 +421,18 @@ check(activity.Processed == 4 && activity.Added == 1 && activity.Updated == 1 &&
 var completedActivity = activity.Snapshot();
 activity.AddIssue(new ScanIssue("Failed film", "downloadFailed", true, DateTimeOffset.UtcNow, "Exact logged diagnostic"));
 check(completedActivity.Issues.Length == 1 && activity.Issues.Length == 2, "retained activity snapshots are independent of later issues");
+var retryItem = Guid.NewGuid();
+var retryIssue = new ScanIssue("Retry film", "downloadFailed", true, DateTimeOffset.UtcNow, "Exact diagnostic", retryItem);
+activity.AddIssue(retryIssue);
+var unresolved = activity.Snapshot();
+activity.RecordResult("Retry film", new ThemeResult("Replaced"), retryItem);
+check(retryIssue.Id != Guid.Empty && retryIssue.Retryable &&
+    activity.Issues.Single(issue => issue.Id == retryIssue.Id) is { Resolved: true, Retryable: false, Diagnostic: "Exact diagnostic" } &&
+    !unresolved.Issues.Single(issue => issue.Id == retryIssue.Id).Resolved,
+    "successful recovery resolves the exact issue while preserving diagnostic history and prior snapshots");
+check(!new ScanIssue("Changed film", "themeChanged", true, DateTimeOffset.UtcNow, null, retryItem).Retryable &&
+    !new ScanIssue("Unsupported film", "scanUnsupported", false, DateTimeOffset.UtcNow, null, retryItem).Retryable,
+    "ownership changes and unsupported items do not offer retry");
 for (var index = 0; index < JellyScoreConstants.ScanRecentIssues; index++)
     activity.AddIssue(new ScanIssue("Issue " + index, "reasonNoMatch", false, DateTimeOffset.UtcNow, null));
 check(activity.Issues.Length == JellyScoreConstants.ScanRecentIssues && activity.Issues[^1].Name.EndsWith((JellyScoreConstants.ScanRecentIssues - 1).ToString()),

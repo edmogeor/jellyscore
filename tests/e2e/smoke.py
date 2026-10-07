@@ -35,11 +35,11 @@ def add_until(token, item_id, youtube_url=None, check_scheduled=False):
     for _ in range(180):
         status, downloads = request("GET", "/ThemeSongs/downloads", token=token)
         theme = next((item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(item_id)), None)
-        assert theme is not None, f"queued item missing from managed downloads: {downloads}"
-        if not field(theme, "pending"):
+        if theme is not None:
             assert field(theme, "status") == "Active", f"queued theme not installed: {theme}"
             return theme
-        assert field(theme, "processing"), f"queued theme add failed: {theme}"
+        _, activity = request("GET", "/ThemeSongs/activity", token=token)
+        assert field(activity, "current") is not None, f"queued theme add did not install a theme: {activity}"
         time.sleep(2)
     raise AssertionError(f"queued theme add did not finish: {theme}")
 
@@ -92,7 +92,7 @@ def scan_until(token, expected=None, expect_current=False):
                 target = "/ThemeSongs/00000000-0000-0000-0000-000000000001"
                 for method, path, body in [("POST", target + "/add", {}), ("POST", target + "/refresh", None),
                                            ("POST", target + "/edit", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}),
-                                           ("DELETE", target, None), ("DELETE", target + "/pending", None),
+                                           ("DELETE", target, None), ("POST", "/ThemeSongs/issues/00000000-0000-0000-0000-000000000001/retry", None),
                                            ("DELETE", "/ThemeSongs/downloads", None), ("POST", "/ThemeSongs/downloads/redownload", None)]:
                     action_status, error = request(method, path, body, token)
                     assert action_status == 409 and field(error, "code") == "availableAfterScan", f"scan must block {method} {path}: {action_status} {error}"
@@ -290,8 +290,8 @@ print("Jellyfin 12 plugin smoke checks passed")
 for method, path in [("GET", "/ThemeSongs/items?search=Dune"), ("POST", "/ThemeSongs/00000000-0000-0000-0000-000000000001/add")]:
     status, _ = request(method, path)
     assert status in (401, 403), f"unauthorized {path}: {status}"
-status, _ = request("DELETE", "/ThemeSongs/00000000-0000-0000-0000-000000000001/pending")
-assert status in (401, 403), f"unauthorized failed-add dismissal: {status}"
+status, _ = request("POST", "/ThemeSongs/issues/00000000-0000-0000-0000-000000000001/retry")
+assert status in (401, 403), f"unauthorized issue retry: {status}"
 print("Creating movie and TV libraries...", flush=True)
 libraries(token)
 print("Waiting for movie and series indexing...", flush=True)
@@ -352,8 +352,6 @@ request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh
 user_theme = next(item for item in items["Items"] if item["Name"] == "User Theme")
 status, result = request("POST", f"/ThemeSongs/{user_theme['Id']}/add", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}, token)
 assert status == 409 and field(result, "code") == "anotherTheme", f"add must protect existing user theme: {status} {result}"
-status, _ = request("DELETE", f"/ThemeSongs/{user_theme['Id']}/pending", token=token)
-assert status == 409, f"dismissal cannot remove a user theme: {status}"
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "cmp", "-s",
                 "/tmp/user-theme-original", "/media/movies/User Theme (2000)/theme.mp3"], check=True)
 print("Add-theme search, source validation, authorization, and existing-file protection passed")
@@ -565,17 +563,17 @@ subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T
 print("Movie and series scan, refresh, delete, bulk delete, and stale-record cleanup passed")
 status, _ = request("POST", f"/ThemeSongs/{unselected_item['Id']}/add", {"youTubeUrl": "https://youtu.be/aaaaaaaaaaa"}, token)
 assert status == 202, f"queue unavailable source: {status}"
-status, _ = request("DELETE", f"/ThemeSongs/{unselected_item['Id']}/pending", token=token)
-assert status == 409, f"active processing cannot be dismissed: {status}"
 for _ in range(180):
-    _, downloads = request("GET", "/ThemeSongs/downloads", token=token)
-    failed = next(item for item in field(downloads, "items") if uuid.UUID(field(item, "itemId")) == uuid.UUID(unselected_item["Id"]))
-    if not field(failed, "processing"):
+    _, activity = request("GET", "/ThemeSongs/activity", token=token)
+    if field(activity, "current") is None:
         break
     time.sleep(2)
 else:
     raise AssertionError("unavailable source did not report failure")
-assert field(failed, "pending") and field(failed, "code"), f"failed add must be dismissible: {failed}"
+issue = next(issue for issue in field(field(activity, "last"), "issues") if uuid.UUID(field(issue, "itemId")) == uuid.UUID(unselected_item["Id"]))
+assert field(issue, "retryable") and field(issue, "code"), f"failed add must offer issue recovery: {activity}"
+_, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+assert field(downloads, "allTotal") == 0, f"failed add must not create a download card: {downloads}"
 status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": []}, token)
 assert status == 204, f"select no libraries for the completed-failure scan check: {status}"
 _, before_scan = request("GET", "/ThemeSongs/scan", token=token)
@@ -588,9 +586,9 @@ for _ in range(10):
     time.sleep(1)
 else:
     raise AssertionError("empty-library scan did not finish after a completed failure")
-status, _ = request("DELETE", f"/ThemeSongs/{unselected_item['Id']}/pending", token=token)
-assert status == 204, f"dismiss failed add: {status}"
+status, result = request("POST", f"/ThemeSongs/issues/{field(issue, 'id')}/retry", token=token)
+assert status == 404 and field(result, "code") == "issueUnavailable", f"replaced activity must not retain stale retry actions: {status} {result}"
 _, downloads = request("GET", "/ThemeSongs/downloads", token=token)
-assert field(downloads, "allTotal") == 0, f"dismissed failure remains in table: {downloads}"
+assert field(downloads, "allTotal") == 0, f"failed add remains in table: {downloads}"
 subprocess.run(["docker", "compose", "-f", "tests/e2e/compose.yaml", "exec", "-T", "jellyfin", "test", "!", "-e", field(unselected_theme, "path")], check=True)
-print("Failed-add dismissal removes only the queue entry and refuses active work")
+print("Failed adds remain outside downloads, and expired activity issues cannot be retried")
