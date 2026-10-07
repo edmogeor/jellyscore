@@ -1,3 +1,29 @@
+## [0.4.0.0]
+
+### Added
+
+- Use one Activity panel for library scans and queued jobs, with current-item stages, completed/total progress, approximate remaining time, result counts, cancellation, and a shared Last run summary.
+- Redownload all managed themes from their saved YouTube or TV theme sources and apply the saved audio settings captured when the batch is accepted. Preserve recording identity, source metadata, and table order, and keep existing files when replacement fails.
+- Retry individual Activity issues with the original add, refresh, source-edit, or redownload action. Keep Copy error beside Retry, reject duplicate and expired retries, and preserve diagnostic history after recovery.
+
+### Improved
+
+- List only installed managed themes in Manage Downloads. Keep queued and unsuccessful adds in Activity, with recovery through issue retries or Add theme.
+- Replace duplicate card outcomes and error paragraphs with compact Queued/Working indicators and issue icons that expand and focus the matching Activity entry. Clear obsolete warnings after recovery or replacement of the retained run.
+- Keep issue focus styling to a thin Jellyfin-accent outline, use neutral icons for skipped outcomes, and retain current file-availability warnings independently of Activity history.
+- Show tool preparation without an item-name prefix, put Last run and its chevron inside the results card, and tighten the trailing space around row menus on desktop and mobile.
+- Share themed scrollbar styling across downloads, add results, issues, and scrollable action menus. Update all 16 translations, remove obsolete strings, and clarify how saved loudness settings apply to existing downloads.
+
+### Fixed
+
+- Stop the local preview before replacing its loaded plugin DLL to prevent invalid-assembly errors during updates.
+- Coordinate scan and queue admission and prevent duplicate processing of the same item.
+
+### Maintenance
+
+- Simplify title filtering, source URL formatting, checksum lookup, theme processing, Activity rendering, and test helpers while preserving matching and file-ownership behavior.
+- Expand API, audio, and browser checks for saved-source redownloads, action-preserving retries, failed-add handling, exact issue navigation, focus, and localized recovery controls.
+
 ## [0.3.3.0]
 
 ### Fixed
