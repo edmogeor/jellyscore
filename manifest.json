@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Fixed\n\n- Move download-row overflow buttons closer to the container's trailing edge on desktop and mobile. Remove the remaining row-end padding and avoid reserving empty scrollbar space for short lists, while preserving the full click target and floating menu placement.\n\n",
+        "checksum": "2cb4fccf6bd39aa41956d2656f657f5a",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.1.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-07T20:38:28Z",
+        "version": "0.4.1.0"
+      },
+      {
         "changelog": "### Added\n\n- Use one Activity panel for library scans and queued jobs, with current-item stages, completed/total progress, approximate remaining time, result counts, cancellation, and a shared Last run summary.\n- Redownload all managed themes from their saved YouTube or TV theme sources and apply the saved audio settings captured when the batch is accepted. Preserve recording identity, source metadata, and table order, and keep existing files when replacement fails.\n- Retry individual Activity issues with the original add, refresh, source-edit, or redownload action. Keep Copy error beside Retry, reject duplicate and expired retries, and preserve diagnostic history after recovery.\n\n### Improved\n\n- List only installed managed themes in Manage Downloads. Keep queued and unsuccessful adds in Activity, with recovery through issue retries or Add theme.\n- Replace duplicate card outcomes and error paragraphs with compact Queued/Working indicators and issue icons that expand and focus the matching Activity entry. Clear obsolete warnings after recovery or replacement of the retained run.\n- Keep issue focus styling to a thin Jellyfin-accent outline, use neutral icons for skipped outcomes, and retain current file-availability warnings independently of Activity history.\n- Show tool preparation without an item-name prefix, put Last run and its chevron inside the results card, and tighten the trailing space around row menus on desktop and mobile.\n- Share themed scrollbar styling across downloads, add results, issues, and scrollable action menus. Update all 16 translations, remove obsolete strings, and clarify how saved loudness settings apply to existing downloads.\n\n### Fixed\n\n- Stop the local preview before replacing its loaded plugin DLL to prevent invalid-assembly errors during updates.\n- Coordinate scan and queue admission and prevent duplicate processing of the same item.\n\n### Maintenance\n\n- Simplify title filtering, source URL formatting, checksum lookup, theme processing, Activity rendering, and test helpers while preserving matching and file-ownership behavior.\n- Expand API, audio, and browser checks for saved-source redownloads, action-preserving retries, failed-add handling, exact issue navigation, focus, and localized recovery controls.\n\n",
         "checksum": "30e9d2898a54a438f67be55cee318388",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.0.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T13:03:44Z",
         "version": "0.1.8.0"
-      },
-      {
-        "changelog": "### Fixed\n\n- Retry loading administrator translations after an initial failure so localized settings and diagnostics appear when the translations become available.\n\n",
-        "checksum": "7c44f07f1aa965a414c50cd702fb1d10",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.7.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T12:25:42Z",
-        "version": "0.1.7.0"
       }
     ]
   }
