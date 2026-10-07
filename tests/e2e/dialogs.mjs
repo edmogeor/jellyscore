@@ -734,9 +734,14 @@ try {
   await page.waitForFunction(
     () =>
       document.querySelector("#themeActiveRun .themeScanState").textContent ===
-      "Dialog film: Preparing yt-dlp and JavaScript runtime",
+      "Preparing yt-dlp and JavaScript runtime",
   );
   scanStatus = { ...scanStatus, ToolSetupStage: null };
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#themeActiveRun .themeScanState").textContent ===
+      "Dialog film: Searching",
+  );
   assert.equal(
     await page.locator("#themeAdd").isDisabled(),
     true,

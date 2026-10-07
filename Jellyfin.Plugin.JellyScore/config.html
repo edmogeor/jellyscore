@@ -1156,6 +1156,7 @@
     #themeSongsPage .themeRowActions {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 0.25rem;
     }
     :is(#themeSongsPage, #themeSongsAdd) .themeLibraryMetadata {
@@ -1207,6 +1208,7 @@
     #themeSongsPage .detailTable th:last-child,
     #themeSongsPage .detailTable td:last-child {
       width: 1%;
+      padding-inline-end: 0.25rem;
       text-align: left;
       white-space: nowrap;
     }
@@ -1295,12 +1297,14 @@
         gap: 0.75rem;
         align-items: start;
         padding: 0.75rem 1rem;
+        padding-inline-end: 0.25rem;
       }
       #themeSongsPage .detailTable td:first-child {
         width: auto;
       }
       #themeSongsPage .detailTable td:last-child {
         width: auto;
+        padding-inline-end: 0;
         margin-left: 0;
       }
     }
@@ -3249,13 +3253,13 @@
           }
         };
         const activeItems = (data.ActiveItems || [])
-          .map((item) =>
-            t("scanItemStage", item.Name, t(data.ToolSetupStage || item.Stage)),
-          )
+          .map((item) => t("scanItemStage", item.Name, t(item.Stage)))
           .join(" · ");
         let state = t(activityState(data));
-        if (data.Running && !data.Cancelling)
-          state = activeItems || t(data.ToolSetupStage || "preparingScan");
+        if (data.Running && !data.Cancelling) {
+          if (data.ToolSetupStage) state = t(data.ToolSetupStage);
+          else state = activeItems || t("preparingScan");
+        }
         field("themeScanState").textContent = state;
         field("themeScanState").previousElementSibling.hidden = !data.Running;
         field("themeScanDates").hidden = data.Running;
