@@ -9,11 +9,11 @@
     "owner": "edmogeor",
     "versions": [
       {
-        "changelog": "### Fixed\n\n- Move download-row overflow buttons closer to the container's trailing edge on desktop and mobile. Remove the remaining row-end padding and avoid reserving empty scrollbar space for short lists, while preserving the full click target and floating menu placement.\n\n",
-        "checksum": "2cb4fccf6bd39aa41956d2656f657f5a",
+        "changelog": "### Fixed\n\n- Match download rows' leading and trailing horizontal padding on desktop and mobile, keeping overflow buttons comfortably inside the content area and clear of the scrollbar. Avoid reserving empty scrollbar space for non-scrolling lists while preserving the full click target and floating menu placement.\n\n",
+        "checksum": "4a658ae4e3cc277a898e0722bc4084a5",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.1.0/JellyScore.zip",
         "targetAbi": "12.0.0.0",
-        "timestamp": "2026-10-07T20:38:28Z",
+        "timestamp": "2026-10-08T14:57:23Z",
         "version": "0.4.1.0"
       },
       {
