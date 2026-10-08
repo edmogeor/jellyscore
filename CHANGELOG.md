@@ -2,7 +2,7 @@
 
 ### Fixed
 
-- Move download-row overflow buttons closer to the container's trailing edge on desktop and mobile. Remove the remaining row-end padding and avoid reserving empty scrollbar space for short lists, while preserving the full click target and floating menu placement.
+- Match download rows' leading and trailing horizontal padding on desktop and mobile, keeping overflow buttons comfortably inside the content area and clear of the scrollbar. Avoid reserving empty scrollbar space for non-scrolling lists while preserving the full click target and floating menu placement.
 
 ## [0.4.0.0]
 
