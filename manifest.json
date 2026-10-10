@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Improved\n\n- Process newly added library items in the shared queue alongside administrator actions, with Activity progress, cancellation, results, and issue retries. Preserve metadata-readiness retries, automatic library selection, and deletion suppression; wait for active full scans before processing queued items.\n\n",
+        "checksum": "3af26a1cbff38b44f6891bf2895156e8",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.2.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-10T19:16:50Z",
+        "version": "0.4.2.0"
+      },
+      {
         "changelog": "### Fixed\n\n- Match download rows' leading and trailing horizontal padding on desktop and mobile, keeping overflow buttons comfortably inside the content area and clear of the scrollbar. Avoid reserving empty scrollbar space for non-scrolling lists while preserving the full click target and floating menu placement.\n\n",
         "checksum": "4a658ae4e3cc277a898e0722bc4084a5",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.1.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T13:42:36Z",
         "version": "0.1.9.0"
-      },
-      {
-        "changelog": "### Fixed\n\n- Exclude episode character introductions and opening scenes from TV theme matches without rejecting openings merely labelled with an episode number.\n- Let explicit TV themes compete with openings and intros, so an otherwise equal theme song ranks above a bare intro.\n\n",
-        "checksum": "d0f9778f0488f8418ea61bb2684856c3",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.8.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T13:03:44Z",
-        "version": "0.1.8.0"
       }
     ]
   }
