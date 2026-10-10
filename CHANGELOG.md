@@ -1,3 +1,9 @@
+## [0.4.2.0]
+
+### Improved
+
+- Process newly added library items in the shared queue alongside administrator actions, with Activity progress, cancellation, results, and issue retries. Preserve metadata-readiness retries, automatic library selection, and deletion suppression; wait for active full scans before processing queued items.
+
 ## [0.4.1.0]
 
 ### Fixed
