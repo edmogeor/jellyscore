@@ -62,7 +62,7 @@ public sealed class Registration : IPluginServiceRegistrator
         services.AddSingleton<ThemeService>();
         services.AddSingleton<ThemeProcessingWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<ThemeProcessingWorker>());
-        services.AddHostedService<NewItemWorker>();
+        services.AddHostedService<NewItemListener>();
         services.AddHostedService<LibraryScanWorker>();
         services.AddSingleton<ThemeScan>();
         services.AddSingleton<MediaBrowser.Model.Tasks.IScheduledTask>(sp => sp.GetRequiredService<ThemeScan>());

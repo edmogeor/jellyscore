@@ -19,6 +19,8 @@ public sealed record ThemeProcessingJob(ManagedTheme Theme, string? YouTubeUrl, 
     public Guid RequestId { get; } = Guid.NewGuid();
     public bool Redownload { get; init; }
     public int? TargetLufs { get; init; }
+    public bool Automatic { get; init; }
+    public DateTimeOffset? ReadyAt { get; init; }
 }
 
 public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProcessingWorker> logger) : BackgroundService
@@ -65,6 +67,17 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
                 { Redownload = true, TargetLufs = targetLufs }).ToArray();
             if (jobs.Length > 0) EnqueueBatch(jobs);
             return jobs.Length;
+        }
+    }
+
+    public void EnqueueAutomatic(BaseItem item)
+    {
+        lock (_gate)
+        {
+            if (_status.Cancelling || _jobs.Values.Any(job => job.Processing && job.Theme.ItemId == item.Id)) return;
+            // Item creation precedes metadata and folder availability; validate when processing, not here.
+            EnqueueBatch([new ThemeProcessingJob(new ManagedTheme { ItemId = item.Id, Name = item.Name }, null, false)
+                { Automatic = true, ReadyAt = DateTimeOffset.UtcNow.AddSeconds(JellyScoreConstants.ItemReadyDelaySeconds) }]);
         }
     }
 
@@ -144,8 +157,23 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
             using var runCancellation = cancellation;
             try
             {
-                var result = await themes.Process(job.Theme.ItemId, job.Replacement, cancellation.Token, stage => Update(id, stage), job.YouTubeUrl,
-                    administratorAdd: !job.Replacement, redownload: job.Redownload, targetLufs: job.TargetLufs);
+                // Automatic events can arrive during a full scan; keep their work queued until it stops.
+                while (ThemeScan.IsRunning) await Task.Delay(TimeSpan.FromSeconds(1), cancellation.Token);
+                if (job.ReadyAt is { } readyAt && readyAt - DateTimeOffset.UtcNow is { Ticks: > 0 } delay)
+                    await Task.Delay(delay, cancellation.Token);
+                ThemeResult result;
+                for (var attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        result = await themes.Process(job.Theme.ItemId, job.Replacement, cancellation.Token, stage => Update(id, stage), job.YouTubeUrl,
+                            administratorAdd: !job.Replacement && !job.Automatic, redownload: job.Redownload, targetLufs: job.TargetLufs);
+                        break;
+                    }
+                    catch (InvalidOperationException e) when (job.Automatic && e.Message.Contains("not ready", StringComparison.Ordinal) &&
+                        attempt < JellyScoreConstants.MetadataRetryAttempts - 1)
+                    { await Task.Delay(TimeSpan.FromSeconds(JellyScoreConstants.MetadataRetryDelaySeconds), cancellation.Token); }
+                }
                 lock (_gate)
                 {
                     _status.RecordResult(job.Theme.Name, result.ReasonCode is null && result.Result is not ("Added" or "Replaced" or "Already themed")
@@ -194,66 +222,38 @@ public sealed class ThemeProcessingWorker(ThemeService themes, ILogger<ThemeProc
     }
 }
 
-public sealed class NewItemWorker(ILibraryManager library, ICollectionManager collections, ThemeService themes, ILogger<NewItemWorker> logger) : BackgroundService
+public sealed class NewItemListener(ILibraryManager library, ICollectionManager collections, ThemeProcessingWorker processing, ILogger<NewItemListener> logger) : IHostedService
 {
-    private readonly Channel<Guid> _queue = Channel.CreateBounded<Guid>(new BoundedChannelOptions(JellyScoreConstants.ScanQueueCapacity) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
-    private readonly HashSet<Guid> _queued = [];
-    private readonly Lock _gate = new();
-
-    public override Task StartAsync(CancellationToken ct)
+    public Task StartAsync(CancellationToken ct)
     {
         library.ItemAdded += Added;
         collections.ItemsAddedToCollection += CollectionUpdated;
-        return base.StartAsync(ct);
+        return Task.CompletedTask;
     }
 
     private void Added(object? sender, ItemChangeEventArgs args)
     {
         if (!Plugin.Instance.Configuration.Enabled || args.Item is not (Movie or Series or BoxSet) || args.Item.ExtraType is not null || args.Item.IsVirtualItem) return;
-        Enqueue(args.Item.Id);
+        Enqueue(args.Item);
     }
 
     private void CollectionUpdated(object? sender, CollectionModifiedEventArgs args)
     {
         if (!Plugin.Instance.Configuration.Enabled) return;
-        Enqueue(args.Collection.Id);
+        Enqueue(args.Collection);
     }
 
-    private void Enqueue(Guid id)
+    private void Enqueue(BaseItem item)
     {
-        lock (_gate)
-        {
-            if (_queued.Add(id) && !_queue.Writer.TryWrite(id)) _queued.Remove(id);
-        }
+        try { processing.EnqueueAutomatic(item); }
+        catch (InvalidOperationException e) { logger.LogWarning("Could not queue theme processing for {ItemId}: {Message}", item.Id, e.Message); }
     }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
-    {
-        await foreach (var id in _queue.Reader.ReadAllAsync(ct))
-        {
-            try
-            {
-                // Library item creation often precedes metadata and directory availability.
-                await Task.Delay(TimeSpan.FromSeconds(JellyScoreConstants.ItemReadyDelaySeconds), ct);
-                for (var attempt = 0; attempt < JellyScoreConstants.MetadataRetryAttempts; attempt++)
-                {
-                    try { await themes.Process(id, false, ct); break; }
-                    catch (InvalidOperationException e) when (e.Message.Contains("not ready", StringComparison.Ordinal) && attempt < JellyScoreConstants.MetadataRetryAttempts - 1)
-                    { await Task.Delay(TimeSpan.FromSeconds(JellyScoreConstants.MetadataRetryDelaySeconds), ct); }
-                }
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (Exception e) { logger.LogWarning("Theme processing for {ItemId} failed: {Message}", id, e.Message); }
-            finally { lock (_gate) _queued.Remove(id); }
-        }
-    }
-
-    public override async Task StopAsync(CancellationToken ct)
+    public Task StopAsync(CancellationToken ct)
     {
         library.ItemAdded -= Added;
         collections.ItemsAddedToCollection -= CollectionUpdated;
-        _queue.Writer.TryComplete();
-        await base.StopAsync(ct);
+        return Task.CompletedTask;
     }
 }
 
@@ -394,6 +394,7 @@ public sealed class ThemeScan(ILibraryManager library, ThemeService themes, Stor
 {
     private static ScanStatus _status = new();
     private static ScanStatus _lastStatus = new();
+    internal static bool IsRunning => _status.Running;
     public string Name => "Scan with JellyScore";
     public string Key => JellyScoreConstants.ScanTaskKey;
     public string Description => "Find themes in selected movie and TV libraries.";

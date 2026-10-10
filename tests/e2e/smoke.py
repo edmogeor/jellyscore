@@ -304,13 +304,45 @@ status, settings = request("GET", "/ThemeSongs/settings", token=token)
 assert status == 200 and {uuid.UUID(str(value)) for value in field(settings, "libraries")} == {
     uuid.UUID(folder["ItemId"]) for folder in folders
 }, f"all libraries should be selected by default: {settings}"
-status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": library_ids}, token)
-assert status == 204, f"select libraries: {status}"
-assert_settings(token, False, library_ids, scan_on_library_refresh=False)
+status, _ = request("POST", "/ThemeSongs/settings", {"enabled": True, "scanOnLibraryRefresh": False, "libraries": []}, token)
+assert status == 204, f"enable new-item processing with no selected libraries: {status}"
 status, tasks = request("GET", "/ScheduledTasks", token=token)
 previous_refresh = next(task for task in tasks if field(task, "key") == "RefreshLibrary")["LastExecutionResult"]
 status, _ = request("POST", "/Library/Refresh", token=token, timeout=120)
 assert status in (200, 204), f"scan media libraries: {status}"
+
+for _ in range(60):
+    _, activity = request("GET", "/ThemeSongs/activity", token=token)
+    current = field(activity, "current")
+    if current is not None and field(activity, "processingItems"):
+        assert field(current, "kind") == "queue", f"new items must use shared activity: {activity}"
+        automatic_run = field(current, "runId")
+        item_id = field(activity, "processingItems")[0]
+        status, error = request("POST", f"/ThemeSongs/{item_id}/add", {}, token)
+        assert status == 409 and field(error, "code") == "queueBusy", f"automatic work must prevent duplicate adds: {status} {error}"
+        status, error = request("POST", "/ThemeSongs/scan", token=token)
+        assert status == 409 and field(error, "code") == "queueBusy", f"automatic queue must block scans: {status} {error}"
+        break
+    time.sleep(0.2)
+else:
+    raise AssertionError(f"new items never appeared in shared Activity: {activity}")
+
+for _ in range(90):
+    _, activity = request("GET", "/ThemeSongs/activity", token=token)
+    last = field(activity, "last")
+    if field(activity, "current") is None and field(last, "runId") == automatic_run:
+        assert field(last, "processed") == field(last, "total") >= 5, f"automatic queue counts disagree: {last}"
+        assert field(last, "added") == 0 and field(last, "failed") == field(last, "total"), f"automatic jobs must respect empty library selection: {last}"
+        assert all(field(issue, "code") == "themeLocationUnavailable" and field(issue, "diagnostic") for issue in field(last, "issues")), f"automatic failures must retain diagnostics: {last}"
+        _, downloads = request("GET", "/ThemeSongs/downloads", token=token)
+        assert field(downloads, "total") == 0, "unsuccessful automatic adds must not create download rows"
+        break
+    time.sleep(1)
+else:
+    raise AssertionError(f"automatic queue did not finish: {activity}")
+status, _ = request("POST", "/ThemeSongs/settings", {"enabled": False, "scanOnLibraryRefresh": False, "libraries": library_ids}, token)
+assert status == 204, f"select libraries: {status}"
+assert_settings(token, False, library_ids, scan_on_library_refresh=False)
 
 for attempt in range(30):
     status, items = request("GET", "/Items?Recursive=true&IncludeItemTypes=Movie,Series", token=token)
