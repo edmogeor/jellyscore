@@ -47,7 +47,7 @@ jobs:
           python3 -c 'from pathlib import Path; import json; path = Path("build.yaml"); config = path.read_text(); placeholder = "changelog: \"\""; assert config.count(placeholder) == 1; path.write_text(config.replace(placeholder, "changelog: {}".format(json.dumps(Path("release-notes.md").read_text().strip()))))'
       - run: bash package.sh
       - run: cp build.yaml release-notes.md dist/
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: JellyScore
           path: |
