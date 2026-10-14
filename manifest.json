@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Fixed\n\n- Match configuration containers to the OIDC plugin's themed outlines and rounded corners.\n- Let Settings cards fill the full available content width.\n\n",
+        "checksum": "31876c491eaf8a3ddc79bc3de59b27cd",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.4.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-14T21:39:10Z",
+        "version": "0.4.4.0"
+      },
+      {
         "changelog": "### Fixed\n\n- Match the OIDC plugin's configuration content width and horizontal padding, keeping the page left-aligned on wide screens.\n\n",
         "checksum": "40924ba852e9613d03af9582a0ffe8dd",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.3.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T15:15:16Z",
         "version": "0.1.11.0"
-      },
-      {
-        "changelog": "### Fixed\n\n- Reject TV theme uploads that borrow another work's named music, including an *Interview with the Vampire* fan edit uploaded before the 2022 series existed.\n- Distinguish film and TV soundtrack editions using titles and identified albums without treating incidental words in descriptions as edition evidence.\n- Keep named TV tracks eligible when their description explicitly links them to the correct series and year.\n\n",
-        "checksum": "7522b05560d41b9bacf6042ca7021411",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.10.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T14:50:37Z",
-        "version": "0.1.10.0"
       }
     ]
   }
