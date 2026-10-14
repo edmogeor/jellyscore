@@ -29,17 +29,19 @@
       padding-inline: 1em;
       padding-bottom: 3rem;
     }
-    #themeSongsPage .verticalSection {
+    #themeSongsPage .verticalSection,
+    #themeSongsPage .themeSettingsGroup {
       box-sizing: border-box;
       width: 100%;
       background: var(--jf-palette-background-paper);
-      border-radius: 0.5rem;
+      border: 1px solid var(--jf-palette-divider);
+      border-radius: 0.75rem;
       padding: 1.4rem;
       margin-bottom: 1.25rem;
     }
     #themeSongsPage #themeSettings {
-      max-width: 48rem;
       background: transparent;
+      border: 0;
       padding: 0;
     }
     #themeSongsPage .themeTabs {
@@ -64,12 +66,6 @@
     #themeSongsPage summary:focus-visible {
       outline: 2px solid var(--jf-palette-primary-main);
       outline-offset: 3px;
-    }
-    #themeSongsPage .themeSettingsGroup {
-      padding: 1.4rem;
-      margin-bottom: 1.25rem;
-      border-radius: 0.5rem;
-      background: var(--jf-palette-background-paper);
     }
     #themeSongsPage .themeSettingsGroup h3 {
       margin: 0 0 1rem;

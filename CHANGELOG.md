@@ -1,3 +1,10 @@
+## [0.4.4.0]
+
+### Fixed
+
+- Match configuration containers to the OIDC plugin's themed outlines and rounded corners.
+- Let Settings cards fill the full available content width.
+
 ## [0.4.3.0]
 
 ### Fixed
