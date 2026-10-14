@@ -1,3 +1,9 @@
+## [0.4.3.0]
+
+### Fixed
+
+- Match the OIDC plugin's configuration content width and horizontal padding, keeping the page left-aligned on wide screens.
+
 ## [0.4.2.0]
 
 ### Improved

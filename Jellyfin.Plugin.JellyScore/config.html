@@ -25,9 +25,8 @@
       text-align: center;
     }
     #themeSongsPage .content-primary {
-      max-width: 80rem;
-      margin: 0 auto;
-      padding: 0 2rem 3rem;
+      margin: 0;
+      padding-inline: 1em;
       padding-bottom: 3rem;
     }
     #themeSongsPage .verticalSection {
@@ -1266,10 +1265,6 @@
       font-variant-numeric: tabular-nums;
     }
     @media (max-width: 640px) {
-      #themeSongsPage .content-primary {
-        padding-left: 1rem;
-        padding-right: 1rem;
-      }
       #themeSongsPage .verticalSection {
         padding: 1.25rem;
       }
@@ -1324,7 +1319,7 @@
     }
   </style>
   <!--__THEME_PLAYER_LICENSES__-->
-  <div data-role="content" class="content-primary">
+  <div data-role="content" class="content-primary readOnlyContent">
     <h2 class="sectionTitle">JellyScore</h2>
     <p class="fieldDescription" data-i18n="description">{{description}}</p>
     <div class="themeTabs" role="tablist" aria-label="JellyScore">
