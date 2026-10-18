@@ -13,6 +13,6 @@
   },
   "dependencies": {
     "@videojs/cdn": "10.0.1",
-    "@videojs/html": "10.0.1"
+    "@videojs/html": "10.1.0"
   }
 }
