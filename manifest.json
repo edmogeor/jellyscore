@@ -9,6 +9,14 @@
     "owner": "edmogeor",
     "versions": [
       {
+        "changelog": "### Maintenance\n\n- Update the bundled Video.js audio player and locale packs from 10.0.1 to 10.2.0.\n- Update Prettier, oxlint, and the CodeQL action.\n\n",
+        "checksum": "75d41e99b251370489f9a50f7ba61ec1",
+        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.5.0/JellyScore.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-10-29T19:20:53Z",
+        "version": "0.4.5.0"
+      },
+      {
         "changelog": "### Fixed\n\n- Match configuration containers to the OIDC plugin's themed outlines and rounded corners.\n- Let Settings cards fill the full available content width.\n\n",
         "checksum": "31876c491eaf8a3ddc79bc3de59b27cd",
         "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.4.4.0/JellyScore.zip",
@@ -239,14 +247,6 @@
         "targetAbi": "12.0.0.0",
         "timestamp": "2026-09-28T16:28:39Z",
         "version": "0.1.12.0"
-      },
-      {
-        "changelog": "### Improved\n\n- Give verified work years and matching film or TV editions more weight when ranking eligible themes, including short series openings.\n- Cap weak soundtrack labels and channel signals so promotional wording cannot outweigh stronger work evidence. Document the scoring weights and selection categories.\n\n",
-        "checksum": "cb7363558d70db2e040b4e8b3c2b8ac8",
-        "sourceUrl": "https://github.com/edmogeor/jellyscore/releases/download/v0.1.11.0/JellyScore.zip",
-        "targetAbi": "12.0.0.0",
-        "timestamp": "2026-09-28T15:15:16Z",
-        "version": "0.1.11.0"
       }
     ]
   }
