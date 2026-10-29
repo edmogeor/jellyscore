@@ -1,3 +1,10 @@
+## [0.4.5.0]
+
+### Maintenance
+
+- Update the bundled Video.js audio player and locale packs from 10.0.1 to 10.2.0.
+- Update Prettier, oxlint, and the CodeQL action.
+
 ## [0.4.4.0]
 
 ### Fixed
