@@ -9,7 +9,7 @@
   "devDependencies": {
     "esbuild": "0.28.2",
     "oxlint": "1.89.0",
-    "prettier": "3.9.10"
+    "prettier": "3.10.1"
   },
   "dependencies": {
     "@videojs/cdn": "10.2.0",
